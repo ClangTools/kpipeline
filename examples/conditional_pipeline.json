@@ -1,0 +1,39 @@
+{
+  "name": "Conditional Processing Pipeline",
+  "nodes": [
+    {
+      "name": "LoadData",
+      "type": "LoadNumberNode",
+      "inputs": ["initial_value"],
+      "outputs": ["number_data"]
+    },
+    {
+      "name": "DecisionGate",
+      "type": "RouterNode",
+      "inputs": ["number_data"],
+      "outputs": ["route_to_positive", "route_to_negative"]
+    },
+    {
+      "name": "ProcessPositive",
+      "type": "ProcessBranchNode",
+      "control_inputs": ["route_to_positive"],
+      "inputs": ["number_data"],
+      "outputs": ["positive_result"],
+      "params": { "message": "Input was positive." }
+    },
+    {
+      "name": "ProcessNegative",
+      "type": "ProcessBranchNode",
+      "control_inputs": ["route_to_negative"],
+      "inputs": ["number_data"],
+      "outputs": ["negative_result"],
+      "params": { "message": "Input was zero or negative." }
+    },
+    {
+      "name": "CollectResult",
+      "type": "CollectResultNode",
+      "inputs": ["positive_result", "negative_result"],
+      "outputs": ["final_result"]
+    }
+  ]
+}

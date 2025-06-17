@@ -16,3 +16,13 @@ cc_binary(
         "@kpipeline",
     ],
 )
+
+cc_binary(
+    name = "conditional",
+    srcs = ["main.conditional.cc"],
+    # 更新数据依赖项为新的配置文件
+    data = ["conditional_pipeline.json"],
+    deps = [
+        "@kpipeline",
+    ],
+)

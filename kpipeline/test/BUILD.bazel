@@ -16,3 +16,12 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "conditional_graph_test",
+    srcs = ["conditional_graph_test.cc"],
+    deps = [
+        "//kpipeline:graph",
+        "@googletest//:gtest_main",
+    ],
+)
