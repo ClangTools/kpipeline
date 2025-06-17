@@ -77,9 +77,9 @@ jobs:
             build --cxxopt='/std:c++17'
             build --cxxopt='/utf-8'
             build --features=static_link_msvcrt
-      - name: Bazel Build example
+      - name: Bazel Build examples
         run: |
-          cd example
+          cd examples
           bazel build example
           bazel build image
           cd ..
