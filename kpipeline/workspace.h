@@ -7,18 +7,21 @@
 #include <string>
 #include <mutex>
 
-namespace kpipeline {
-
-  class PipelineException : public std::runtime_error {
+namespace kpipeline
+{
+  class PipelineException : public std::runtime_error
+  {
   public:
     using std::runtime_error::runtime_error;
   };
 
-  class Workspace {
+  class Workspace
+  {
   public:
     // 将数据存入工作空间
     template <typename T>
-    void Set(const std::string& name, T&& data) {
+    void Set(const std::string& name, T&& data)
+    {
       // 在写入前加锁
       std::lock_guard<std::mutex> lock(mutex_);
       data_[name] = std::forward<T>(data);
@@ -28,26 +31,45 @@ namespace kpipeline {
     // 注意：返回的是值的拷贝，而不是引用，以避免悬空引用问题。
     // 如果性能是极致要求，可以返回一个被锁保护的迭代器或智能指针，但拷贝更安全简单。
     template <typename T>
-    T Get(const std::string& name) const {
+    T Get(const std::string& name) const
+    {
       // 在读取前加锁
       std::lock_guard<std::mutex> lock(mutex_);
-      try {
+      try
+      {
         return std::any_cast<T>(data_.at(name));
-      } catch (const std::out_of_range&) {
+      }
+      catch (const std::out_of_range&)
+      {
         throw PipelineException("Workspace error: Data with name '" + name + "' not found.");
-      } catch (const std::bad_any_cast& e) {
+      } catch (const std::bad_any_cast& e)
+      {
         // 提供更详细的类型错误信息
         const std::any& val = data_.at(name);
         throw PipelineException("Workspace error: Type mismatch for data '" + name + "'. "
-                                "Requested: " + typeid(T).name() +
-                                ", Actual: " + val.type().name());
+          "Requested: " + typeid(T).name() +
+          ", Actual: " + val.type().name());
       }
     }
 
     // 检查数据是否存在
-    bool Has(const std::string& name) const {
+    bool Has(const std::string& name) const
+    {
       std::lock_guard<std::mutex> lock(mutex_);
       return data_.count(name) > 0;
+    }
+
+    std::any GetAny(const std::string& name) const
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      try
+      {
+        return data_.at(name);
+      }
+      catch (const std::out_of_range&)
+      {
+        throw PipelineException("Workspace error: Data with name '" + name + "' not found.");
+      }
     }
 
   private:
@@ -55,7 +77,6 @@ namespace kpipeline {
     mutable std::mutex mutex_;
     std::map<std::string, std::any> data_;
   };
-
 } // namespace kpipeline
 
 #endif // KPIPELINE_WORKSPACE_H_

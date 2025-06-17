@@ -26,3 +26,15 @@ cc_binary(
         "@kpipeline",
     ],
 )
+
+cc_binary(
+    name = "subgraph",
+    srcs = ["main.sub.graph.node.cc"],
+    data = [
+        "main_pipeline.json",
+        "photo_analysis_subgraph.json",
+    ],
+    deps = [
+        "@kpipeline",
+    ],
+)
