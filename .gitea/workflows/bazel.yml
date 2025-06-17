@@ -86,7 +86,6 @@ jobs:
             build --features=static_link_msvcrt
       - name: Bazel Build example
         run: |
-          cp .bazelrc ./example
           cd example
           bazel build app
           cd ..
