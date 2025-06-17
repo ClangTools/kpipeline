@@ -16,6 +16,7 @@
 #include "node.h"
 #include "workspace.h"
 #include "thread_pool.h"
+#include "profiler.h"
 
 namespace kpipeline
 {
@@ -28,14 +29,18 @@ namespace kpipeline
       nodes_[node->GetName()] = node;
     }
 
-    void Run(Workspace& ws, size_t num_threads = std::thread::hardware_concurrency())
+    // 新增 enable_profiling 参数
+    void Run(Workspace& ws, size_t num_threads = std::thread::hardware_concurrency(), bool enable_profiling = false)
     {
       if (nodes_.empty()) return;
+
+      // 创建 Profiler 实例
+      Profiler profiler;
 
       auto [adj, in_degree] = BuildDependencies();
 
       ThreadPool pool(num_threads);
-      std::atomic<size_t> finished_nodes_count(0); // 包含执行完成和被剪枝的节点
+      std::atomic<size_t> finished_nodes_count(0);
       size_t total_graph_nodes = nodes_.size();
 
       std::mutex completion_mutex;
@@ -44,9 +49,8 @@ namespace kpipeline
       std::function<void(const std::string&)> schedule_next;
       std::function<void(const std::string&)> prune_branch;
 
-      // 函数：处理一个完成的节点，并调度其后继
       schedule_next = [this, &ws, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, &
-          schedule_next, &prune_branch](const std::string& completed_node_name)
+          schedule_next, &prune_branch, &profiler, enable_profiling](const std::string& completed_node_name)
         {
           if (adj.count(completed_node_name))
           {
@@ -67,21 +71,22 @@ namespace kpipeline
 
                 if (can_run)
                 {
-                  pool.Enqueue([this, &ws, &schedule_next, successor_name]
+                  pool.Enqueue([this, &ws, &schedule_next, &profiler, enable_profiling, successor_name]
                   {
                     std::cout << "[Thread " << std::this_thread::get_id() << "] Executing Node: " << successor_name <<
                       std::endl;
+                    auto start_time = std::chrono::high_resolution_clock::now();
                     try { nodes_.at(successor_name)->Execute(ws); }
                     catch (const std::exception& e)
                     {
                       std::cerr << "Exception in node '" << successor_name << "': " << e.what() << std::endl;
                     }
+                    if (enable_profiling) profiler.End(successor_name, start_time);
                     schedule_next(successor_name);
                   });
                 }
                 else
                 {
-                  // 如果分支被剪枝，则递归地剪掉所有下游分支
                   prune_branch(successor_name);
                 }
               }
@@ -94,7 +99,6 @@ namespace kpipeline
           }
         };
 
-      // 函数：递归地剪枝一个分支
       prune_branch = [&adj, &in_degree, &finished_nodes_count, total_graph_nodes, &cv_completion, &prune_branch](
         const std::string& pruned_node_name)
         {
@@ -102,10 +106,7 @@ namespace kpipeline
           {
             for (const auto& successor_name : adj.at(pruned_node_name))
             {
-              if (--in_degree.at(successor_name) == 0)
-              {
-                prune_branch(successor_name); // 递归剪枝
-              }
+              if (--in_degree.at(successor_name) == 0) { prune_branch(successor_name); }
             }
           }
           if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes)
@@ -119,14 +120,16 @@ namespace kpipeline
       {
         if (in_degree.at(name) == 0)
         {
-          pool.Enqueue([this, &ws, &schedule_next, name]
+          pool.Enqueue([this, &ws, &schedule_next, &profiler, enable_profiling, name]
           {
             std::cout << "[Thread " << std::this_thread::get_id() << "] Executing Node: " << name << std::endl;
+            auto start_time = std::chrono::high_resolution_clock::now();
             try { nodes_.at(name)->Execute(ws); }
             catch (const std::exception& e)
             {
               std::cerr << "Exception in node '" << name << "': " << e.what() << std::endl;
             }
+            if (enable_profiling) profiler.End(name, start_time);
             schedule_next(name);
           });
         }
@@ -136,12 +139,17 @@ namespace kpipeline
       cv_completion.wait(lock, [&] { return finished_nodes_count.load() == total_graph_nodes; });
 
       std::cout << "--- Graph Execution Finished ---" << std::endl;
+
+      // 在图执行完毕后打印报告
+      if (enable_profiling)
+      {
+        profiler.PrintReport();
+      }
     }
 
   private:
     std::pair<std::map<std::string, std::vector<std::string>>,
-              std::map<std::string, std::atomic<int>>>
-    BuildDependencies()
+              std::map<std::string, std::atomic<int>>> BuildDependencies()
     {
       std::map<std::string, std::vector<std::string>> adj;
       std::map<std::string, std::atomic<int>> in_degree;

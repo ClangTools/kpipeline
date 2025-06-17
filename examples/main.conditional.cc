@@ -11,6 +11,7 @@
 
 namespace conditional_nodes
 {
+  // 1. 加载一个数字
   class LoadNumberNode : public kpipeline::Node
   {
   public:
@@ -20,12 +21,15 @@ namespace conditional_nodes
 
     void Execute(kpipeline::Workspace& ws) const override
     {
+      // 模拟 I/O 耗时
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
       ws.Set(outputs_.at(0), ws.Get<int>(inputs_.at(0)));
     }
   };
 
   REGISTER_NODE(LoadNumberNode);
 
+  // 2. 路由节点，这个节点应该很快，不需要加 sleep
   class RouterNode : public kpipeline::Node
   {
   public:
@@ -51,6 +55,7 @@ namespace conditional_nodes
 
   REGISTER_NODE(RouterNode);
 
+  // 3. 分支处理节点
   class ProcessBranchNode : public kpipeline::Node
   {
   public:
@@ -61,6 +66,11 @@ namespace conditional_nodes
 
     void Execute(kpipeline::Workspace& ws) const override
     {
+      // ======================== 修复开始 ========================
+      // 重新加入模拟 CPU 密集型工作的耗时
+      std::this_thread::sleep_for(std::chrono::milliseconds(150));
+      // ======================== 修复结束 ========================
+
       int value = ws.Get<int>(inputs_.at(0));
       std::string result = message_ + " Value was: " + std::to_string(value);
       ws.Set(outputs_.at(0), result);
@@ -72,7 +82,7 @@ namespace conditional_nodes
 
   REGISTER_NODE(ProcessBranchNode);
 
-  // 结果收集节点
+  // 4. 结果收集节点，这个节点也应该很快
   class CollectResultNode : public kpipeline::Node
   {
   public:
@@ -82,18 +92,13 @@ namespace conditional_nodes
 
     void Execute(kpipeline::Workspace& ws) const override
     {
-      // ======================== 修复开始 ========================
-      // 正确且健壮地处理可选输入
-
       std::string result_str = "Error: No result found from any branch.";
 
-      // JSON 中定义的第一个输入是 "positive_result"
       const std::string& positive_input_name = inputs_.at(0);
       if (ws.Has(positive_input_name))
       {
         result_str = ws.Get<std::string>(positive_input_name);
       }
-      // JSON 中定义的第二个输入是 "negative_result"
       else
       {
         const std::string& negative_input_name = inputs_.at(1);
@@ -104,7 +109,6 @@ namespace conditional_nodes
       }
 
       ws.Set(outputs_.at(0), "Final Report: " + result_str);
-      // ======================== 修复结束 ========================
     }
   };
 
@@ -121,7 +125,7 @@ void run_test_case(int initial_value)
     kpipeline::Workspace ws;
     ws.Set("initial_value", initial_value);
 
-    graph->Run(ws, 2);
+    graph->Run(ws, 2, true);
 
     const auto& final_report = ws.Get<std::string>("final_result");
     std::cout << "\n" << final_report << std::endl;

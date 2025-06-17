@@ -42,6 +42,11 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "profiler",
+    hdrs = ["profiler.h"],
+)
+
 # 图库
 cc_library(
     name = "graph",
@@ -49,6 +54,7 @@ cc_library(
     includes = ["."],
     deps = [
         ":node",
+        ":profiler",
         ":thread_pool",
     ],
 )
