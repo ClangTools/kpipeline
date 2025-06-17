@@ -12,6 +12,10 @@ cc_library(
     name = "thread_pool",
     hdrs = ["thread_pool.h"],
     includes = ["."],
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread"],
+        "//conditions:default": [],
+    }),
 )
 
 # 节点库
