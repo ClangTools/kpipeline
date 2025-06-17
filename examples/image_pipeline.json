@@ -1,0 +1,45 @@
+{
+  "name": "Image Processing Pipeline",
+  "nodes": [
+    {
+      "name": "LoadImage",
+      "type": "LoadImageNode",
+      "inputs": ["image_path"],
+      "outputs": ["image_data"]
+    },
+    {
+      "name": "CreateThumbnail",
+      "type": "ResizeImageNode",
+      "inputs": ["image_data"],
+      "outputs": ["thumbnail_path"],
+      "params": {
+        "width": 150,
+        "height": 150,
+        "suffix": "thumb"
+      }
+    },
+    {
+      "name": "CreateWebVersion",
+      "type": "ResizeImageNode",
+      "inputs": ["image_data"],
+      "outputs": ["web_image_path"],
+      "params": {
+        "width": 800,
+        "height": 600,
+        "suffix": "web"
+      }
+    },
+    {
+      "name": "ExtractMetadata",
+      "type": "ExtractMetadataNode",
+      "inputs": ["image_data"],
+      "outputs": ["metadata_json"]
+    },
+    {
+      "name": "GenerateFinalReport",
+      "type": "GenerateReportNode",
+      "inputs": ["thumbnail_path", "web_image_path", "metadata_json"],
+      "outputs": ["final_json_report"]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+cc_test(
+    name = "workspace_test",
+    srcs = ["workspace_test.cc"],
+    deps = [
+        "//kpipeline:workspace",
+        "@googletest//:gtest_main",  # 依赖 gtest_main 会自动提供 main 函数
+    ],
+)
+
+# 测试 Graph 组件
+cc_test(
+    name = "graph_test",
+    srcs = ["graph_test.cc"],
+    deps = [
+        "//kpipeline:graph",
+        "@googletest//:gtest_main",
+    ],
+)

@@ -1,0 +1,92 @@
+name: Bazel Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+
+env:
+  HTTP_PROXY: ${{ vars.HTTP_PROXY }}
+  HTTPS_PROXY: ${{ vars.HTTPS_PROXY }}
+  NO_PROXY: '127.0.0.1,localhost,172.18.0.0/16,192.168.0.0/8,*.kekxv.com'
+  
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Install Bazel(NO WINDOWS)
+        uses: bazel-contrib/setup-bazel@0.15.0
+        if: ${{matrix.os != 'windows-latest'}}
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          bazelisk-version: 1.x
+          # Avoid downloading Bazel every time.
+          bazelisk-cache: false
+          # Store build cache per workflow.
+          #disk-cache: ${{ github.workflow }}
+          # Share repository cache between workflows.
+          repository-cache: false
+          bazelrc: |
+            build --cxxopt='-std=c++17'
+      - name: Install Bazel(WINDOWS)
+        if: ${{matrix.os == 'windows-latest'}}
+        uses: bazel-contrib/setup-bazel@0.15.0
+        with: 
+          token: ${{ secrets.GH_TOKEN }}
+          bazelisk-version: 1.x
+          bazelisk-cache: false
+          repository-cache: false
+          bazelrc: |
+            build --cxxopt='/std:c++17'
+            build --cxxopt='/utf-8'
+            build --features=static_link_msvcrt
+
+      - name: Bazel Test
+        run: |
+          bazel test kpipeline/...
+  example:
+    needs: build
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: Build example
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      - name: Install Bazel(NO WINDOWS)
+        uses: bazel-contrib/setup-bazel@0.15.0
+        if: ${{matrix.os != 'windows-latest'}}
+        with:
+          token: ${{ secrets.GH_TOKEN }}
+          bazelisk-version: 1.x
+          bazelisk-cache: false
+          repository-cache: false
+          bazelrc: |
+            build --cxxopt='-std=c++17'
+      - name: Install Bazel(WINDOWS)
+        if: ${{matrix.os == 'windows-latest'}}
+        uses: bazel-contrib/setup-bazel@0.15.0
+        with: 
+          token: ${{ secrets.GH_TOKEN }}
+          bazelisk-version: 1.x
+          bazelisk-cache: false
+          repository-cache: false
+          bazelrc: |
+            build --cxxopt='/std:c++17'
+            build --cxxopt='/utf-8'
+            build --features=static_link_msvcrt
+      - name: Bazel Build example
+        run: |
+          cp .bazelrc ./example
+          cd example
+          bazel build app
+          cd ..

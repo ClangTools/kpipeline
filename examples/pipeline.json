@@ -1,0 +1,43 @@
+{
+  "name": "Parallel Data Analysis",
+  "nodes": [
+    {
+      "name": "LoadData",
+      "type": "LoadNumbersNode",
+      "inputs": ["initial_input"],
+      "outputs": ["numbers_vec"]
+    },
+    {
+      "name": "CalculateSum",
+      "type": "SumNode",
+      "inputs": ["numbers_vec"],
+      "outputs": ["sum_val"]
+    },
+    {
+      "name": "CalculateAverage",
+      "type": "AverageNode",
+      "inputs": ["numbers_vec"],
+      "outputs": ["avg_val"]
+    },
+    {
+      "name": "ProcessSum",
+      "type": "DummyProcessNode",
+      "inputs": ["sum_val"],
+      "outputs": ["processed_sum_report"],
+      "params": { "message": "Sum has been processed." }
+    },
+    {
+      "name": "ProcessAverage",
+      "type": "DummyProcessNode",
+      "inputs": ["avg_val"],
+      "outputs": ["processed_avg_report"],
+      "params": { "message": "Average has been processed." }
+    },
+    {
+      "name": "FinalReport",
+      "type": "FinalReportNode",
+      "inputs": ["processed_sum_report", "processed_avg_report"],
+      "outputs": ["final_report"]
+    }
+  ]
+}

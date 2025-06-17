@@ -1,0 +1,18 @@
+cc_binary(
+    name = "example",
+    srcs = ["main.cc"],
+    data = ["pipeline.json"],
+    deps = [
+        "@kpipeline",
+    ],
+)
+
+cc_binary(
+    name = "image",
+    srcs = ["main.image.cc"],
+    # 更新数据依赖项为新的配置文件
+    data = ["image_pipeline.json"],
+    deps = [
+        "@kpipeline",
+    ],
+)
