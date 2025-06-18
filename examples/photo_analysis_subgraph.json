@@ -1,0 +1,29 @@
+{
+  "name": "Photo Analysis Sub-Graph",
+  "nodes": [
+    {
+      "name": "ExtractPhotoPaths",
+      "type": "ExtractPhotoPathsNode",
+      "inputs": ["user_profile_data"],
+      "outputs": ["photo_list"]
+    },
+    {
+      "name": "AnalyzeColors",
+      "type": "AnalyzeColorsNode",
+      "inputs": ["photo_list"],
+      "outputs": ["color_stats"]
+    },
+    {
+      "name": "CountObjects",
+      "type": "CountObjectsNode",
+      "inputs": ["photo_list"],
+      "outputs": ["object_stats"]
+    },
+    {
+      "name": "CompilePhotoReport",
+      "type": "CompilePhotoReportNode",
+      "inputs": ["color_stats", "object_stats"],
+      "outputs": ["photo_analysis_report"]
+    }
+  ]
+}

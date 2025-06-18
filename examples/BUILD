@@ -38,3 +38,11 @@ cc_binary(
         "@kpipeline",
     ],
 )
+
+cc_binary(
+    name = "multiple",
+    srcs = ["main.multiple.cc"],
+    deps = [
+        "@kpipeline",
+    ],
+)

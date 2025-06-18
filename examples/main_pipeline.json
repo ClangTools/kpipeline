@@ -1,0 +1,26 @@
+{
+  "name": "User Profile Main Pipeline",
+  "nodes": [
+    {
+      "name": "LoadUserProfile",
+      "type": "LoadUserProfileNode",
+      "inputs": ["user_id"],
+      "outputs": ["user_profile_data"]
+    },
+    {
+      "name": "AnalyzeAllPhotos",
+      "type": "SubGraphNode",
+      "inputs": ["user_profile_data"],
+      "outputs": ["photo_analysis_report"],
+      "params": {
+        "config_path": "examples/photo_analysis_subgraph.json"
+      }
+    },
+    {
+      "name": "GenerateFinalUserReport",
+      "type": "GenerateFinalUserReportNode",
+      "inputs": ["user_profile_data", "photo_analysis_report"],
+      "outputs": ["final_user_report"]
+    }
+  ]
+}
