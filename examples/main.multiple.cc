@@ -11,28 +11,16 @@
 #include "node.h"
 #include "workspace.h"
 
+// --- 为这个例子定义节点 ---
 namespace fan_out_in_nodes
 {
-  // 辅助函数，现在也支持 control_inputs
-  Json::Value CreateConfig(const std::string& name,
-                           const std::vector<std::string>& inputs,
-                           const std::vector<std::string>& outputs,
-                           const std::vector<std::string>& control_inputs = {})
-  {
-    Json::Value config;
-    config["name"] = name;
-    for (const auto& i : inputs) config["inputs"].append(i);
-    for (const auto& o : outputs) config["outputs"].append(o);
-    for (const auto& c : control_inputs) config["control_inputs"].append(c);
-    return config;
-  }
-
-  // 1. Splitter 节点，现在需要一个控制输出信号
+  // 1. 扇出节点 (Splitter)
   class SplitBatchNode : public kpipeline::Node
   {
   public:
-    // 我们为它增加一个明确的输出信号，用于控制依赖
-    SplitBatchNode() : Node(CreateConfig("Splitter", {"initial_batch"}, {"split_complete_signal"}))
+    // 调用新的、无JSON的基类构造函数
+    SplitBatchNode()
+      : Node("Splitter", {"initial_batch"}, {"split_complete_signal"})
     {
     }
 
@@ -44,21 +32,20 @@ namespace fan_out_in_nodes
       {
         ws.Set("task_" + std::to_string(item_id), item_id);
       }
-      // 执行完毕后，写入控制信号
       ws.Set(outputs_.at(0), kpipeline::ControlSignal{});
     }
   };
 
-  // 2. Processor 节点，现在增加一个控制输入
+  // 2. 并行处理节点 (Processor)
   class ProcessItemNode : public kpipeline::Node
   {
   public:
+    // 调用新的、无JSON的基类构造函数
     ProcessItemNode(int task_id)
-      : Node(CreateConfig("Processor_" + std::to_string(task_id),
-                          {"task_" + std::to_string(task_id)},
-                          {"result_" + std::to_string(task_id)},
-                          // 声明对 Splitter 完成信号的控制依赖
-                          {"split_complete_signal"}))
+      : Node("Processor_" + std::to_string(task_id),
+             {"task_" + std::to_string(task_id)},
+             {"result_" + std::to_string(task_id)},
+             {"split_complete_signal"})
     {
     }
 
@@ -79,12 +66,13 @@ namespace fan_out_in_nodes
     }
   };
 
-  // 3. Aggregator 节点，保持不变
+  // 3. 扇入节点 (Aggregator)
   class AggregateResultsNode : public kpipeline::Node
   {
   public:
+    // 调用新的、无JSON的基类构造函数
     AggregateResultsNode(const std::vector<std::string>& result_names)
-      : Node(CreateConfig("Aggregator", result_names, {"final_summary"}))
+      : Node("Aggregator", result_names, {"final_summary"})
     {
     }
 
@@ -108,11 +96,13 @@ namespace fan_out_in_nodes
 int main()
 {
   using namespace fan_out_in_nodes;
-  std::cout << "--- Running Fan-out/Fan-in Example (Code-defined Graph) ---\n";
+
+  std::cout << "--- Running Fan-out/Fan-in Example (Pure Code-defined Graph, No JSON) ---\n";
+
   std::vector<int> task_ids = {101, 102, 103, 104, 105};
+
   kpipeline::Graph graph;
 
-  // 添加节点，逻辑不变
   graph.AddNode(std::make_shared<SplitBatchNode>());
 
   std::vector<std::string> result_names;
@@ -128,7 +118,9 @@ int main()
   {
     kpipeline::Workspace ws;
     ws.Set("initial_batch", task_ids);
+
     graph.Run(ws, 4, true);
+
     const auto& final_summary = ws.Get<std::string>("final_summary");
     std::cout << "\n" << final_summary << std::endl;
   }
@@ -137,5 +129,6 @@ int main()
     std::cerr << "An error occurred: " << e.what() << std::endl;
     return 1;
   }
+
   return 0;
 }
