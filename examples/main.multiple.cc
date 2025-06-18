@@ -5,124 +5,155 @@
 #include <thread>
 #include <memory>
 #include <sstream>
-#include <random>
 
 #include "graph.h"
 #include "node.h"
 #include "workspace.h"
 
-// --- 为这个例子定义节点 ---
-namespace fan_out_in_nodes
+// --- 定义数据结构 ---
+struct SourceData
 {
-  // 1. 扇出节点 (Splitter)
-  class SplitBatchNode : public kpipeline::Node
+  int id;
+  std::string content;
+};
+
+// --- 为这个例子定义不同的节点类型 ---
+namespace multi_task_nodes
+{
+  // 1. 数据提供节点
+  class DataProviderNode : public kpipeline::Node
   {
   public:
-    // 调用新的、无JSON的基类构造函数
-    SplitBatchNode()
-      : Node("Splitter", {"initial_batch"}, {"split_complete_signal"})
+    DataProviderNode()
+      : Node("DataProvider", {"source_id"}, {"source_data"})
     {
     }
 
     void Execute(kpipeline::Workspace& ws) const override
     {
-      auto batch = ws.Get<std::vector<int>>(inputs_.at(0));
-      std::cout << "    > Splitting batch of " << batch.size() << " items..." << std::endl;
-      for (int item_id : batch)
-      {
-        ws.Set("task_" + std::to_string(item_id), item_id);
-      }
-      ws.Set(outputs_.at(0), kpipeline::ControlSignal{});
+      int id = ws.Get<int>(inputs_.at(0));
+      std::cout << "    > Providing data for ID: " << id << "..." << std::endl;
+      SourceData data{id, "This is the main content for the task."};
+      ws.Set(outputs_.at(0), data);
     }
   };
 
-  // 2. 并行处理节点 (Processor)
-  class ProcessItemNode : public kpipeline::Node
+  // 2. 并行任务 A: 内容分析 (耗时较长)
+  class AnalyzeContentNode : public kpipeline::Node
   {
   public:
-    // 调用新的、无JSON的基类构造函数
-    ProcessItemNode(int task_id)
-      : Node("Processor_" + std::to_string(task_id),
-             {"task_" + std::to_string(task_id)},
-             {"result_" + std::to_string(task_id)},
-             {"split_complete_signal"})
+    AnalyzeContentNode()
+      : Node("ContentAnalyzer", {"source_data"}, {"analysis_result"})
     {
     }
 
     void Execute(kpipeline::Workspace& ws) const override
     {
-      int item_id = ws.Get<int>(inputs_.at(0));
-
-      std::random_device rd;
-      std::mt19937 gen(rd());
-      std::uniform_int_distribution<> distrib(50, 200);
-      int sleep_ms = distrib(gen);
-
-      std::cout << "    > Processing item " << item_id << " (will take " << sleep_ms << "ms)..." << std::endl;
-      std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
-
-      std::string result = "Item " + std::to_string(item_id) + " processed successfully.";
+      auto data = ws.Get<SourceData>(inputs_.at(0));
+      std::cout << "    > [Task A] Analyzing content... (long task)" << std::endl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+      std::string result = "Content analysis complete: " +
+        std::to_string(data.content.length()) + " chars found.";
       ws.Set(outputs_.at(0), result);
     }
   };
 
-  // 3. 扇入节点 (Aggregator)
-  class AggregateResultsNode : public kpipeline::Node
+  // 3. 并行任务 B: 生成预览 (耗时中等)
+  class GeneratePreviewNode : public kpipeline::Node
   {
   public:
-    // 调用新的、无JSON的基类构造函数
-    AggregateResultsNode(const std::vector<std::string>& result_names)
-      : Node("Aggregator", result_names, {"final_summary"})
+    GeneratePreviewNode()
+      : Node("PreviewGenerator", {"source_data"}, {"preview_result"})
     {
     }
 
     void Execute(kpipeline::Workspace& ws) const override
     {
-      std::cout << "    > Aggregating all results..." << std::endl;
-      std::stringstream summary;
-      summary << "--- Aggregation Summary ---\n";
-      for (const auto& input_name : inputs_)
-      {
-        if (ws.Has(input_name))
-        {
-          summary << " - " << ws.Get<std::string>(input_name) << "\n";
-        }
-      }
-      ws.Set(outputs_.at(0), summary.str());
+      auto data = ws.Get<SourceData>(inputs_.at(0));
+      std::cout << "    > [Task B] Generating preview... (medium task)" << std::endl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(120));
+      std::string result = "Preview generated: '" + data.content.substr(0, 10) + "...'";
+      ws.Set(outputs_.at(0), result);
     }
   };
-} // namespace fan_out_in_nodes
+
+  // 4. 并行任务 C: 归档数据 (耗时较短)
+  class ArchiveDataNode : public kpipeline::Node
+  {
+  public:
+    ArchiveDataNode()
+      : Node("DataArchiver", {"source_data"}, {"archive_status"})
+    {
+    }
+
+    void Execute(kpipeline::Workspace& ws) const override
+    {
+      auto data = ws.Get<SourceData>(inputs_.at(0));
+      std::cout << "    > [Task C] Archiving data... (short task)" << std::endl;
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      std::string result = "Data for ID " + std::to_string(data.id) + " archived.";
+      ws.Set(outputs_.at(0), result);
+    }
+  };
+
+  // 5. 扇入节点: 聚合报告
+  class ReportAggregatorNode : public kpipeline::Node
+  {
+  public:
+    ReportAggregatorNode()
+      : Node("ReportAggregator",
+             {"analysis_result", "preview_result", "archive_status"},
+             {"final_report"})
+    {
+    }
+
+    void Execute(kpipeline::Workspace& ws) const override
+    {
+      std::cout << "    > Aggregating results from all parallel tasks..." << std::endl;
+      auto analysis_res = ws.Get<std::string>(inputs_.at(0));
+      auto preview_res = ws.Get<std::string>(inputs_.at(1));
+      auto archive_res = ws.Get<std::string>(inputs_.at(2));
+
+      std::stringstream report;
+      report << "--- Final Processing Report ---\n";
+      report << "  - Analysis: " << analysis_res << "\n";
+      report << "  - Preview:  " << preview_res << "\n";
+      report << "  - Archive:  " << archive_res << "\n";
+      ws.Set(outputs_.at(0), report.str());
+    }
+  };
+} // namespace multi_task_nodes
 
 int main()
 {
-  using namespace fan_out_in_nodes;
+  using namespace multi_task_nodes;
 
-  std::cout << "--- Running Fan-out/Fan-in Example (Pure Code-defined Graph, No JSON) ---\n";
+  std::cout << "--- Running Multi-Task Parallel Processing Example ---\n";
 
-  std::vector<int> task_ids = {101, 102, 103, 104, 105};
-
+  // 在代码中构建图
   kpipeline::Graph graph;
 
-  graph.AddNode(std::make_shared<SplitBatchNode>());
+  // 1. 添加数据源节点
+  graph.AddNode(std::make_shared<DataProviderNode>());
 
-  std::vector<std::string> result_names;
-  for (int id : task_ids)
-  {
-    graph.AddNode(std::make_shared<ProcessItemNode>(id));
-    result_names.push_back("result_" + std::to_string(id));
-  }
+  // 2. 添加所有并行的处理节点 (扇出)
+  graph.AddNode(std::make_shared<AnalyzeContentNode>());
+  graph.AddNode(std::make_shared<GeneratePreviewNode>());
+  graph.AddNode(std::make_shared<ArchiveDataNode>());
 
-  graph.AddNode(std::make_shared<AggregateResultsNode>(result_names));
+  // 3. 添加聚合节点 (扇入)
+  graph.AddNode(std::make_shared<ReportAggregatorNode>());
 
   try
   {
     kpipeline::Workspace ws;
-    ws.Set("initial_batch", task_ids);
+    ws.Set("source_id", 42);
 
+    // 使用足够的线程来并行化所有任务
     graph.Run(ws, 4, true);
 
-    const auto& final_summary = ws.Get<std::string>("final_summary");
-    std::cout << "\n" << final_summary << std::endl;
+    const auto& final_report = ws.Get<std::string>("final_report");
+    std::cout << "\n" << final_report << std::endl;
   }
   catch (const std::exception& e)
   {
