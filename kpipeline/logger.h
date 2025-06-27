@@ -78,7 +78,7 @@ namespace kpipeline
     const char* short_filename = last_slash ? last_slash + 1 : filename;
 
     std::string full_log = fmt::format("[{:%Y-%m-%d %H:%M:%S}] [{:^5}] [{}:{}] {}",
-                                       fmt::localtime(std::time(nullptr)),
+                                       std::chrono::system_clock::now(),
                                        level_str,
                                        short_filename,
                                        line,
