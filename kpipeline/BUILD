@@ -1,5 +1,16 @@
 package(default_visibility = ["//visibility:public"])
 
+cc_library(
+    name = "logger",
+    srcs = ["logger.cc"],
+    hdrs = ["logger.h"],
+    includes = ["."],
+    linkopts = ["-pthread"],
+    deps = [
+        "@fmt",
+    ],
+)
+
 # workspace 库
 cc_library(
     name = "workspace",
@@ -53,6 +64,7 @@ cc_library(
     hdrs = ["graph.h"],
     includes = ["."],
     deps = [
+        ":logger",
         ":node",
         ":profiler",
         ":thread_pool",
@@ -66,6 +78,7 @@ cc_library(
     includes = ["."],
     deps = [
         ":graph",
+        ":logger",
         ":node_factory",
     ],
 )

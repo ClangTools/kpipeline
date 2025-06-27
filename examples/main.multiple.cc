@@ -126,6 +126,7 @@ namespace multi_task_nodes
 
 int main()
 {
+  kpipeline::Logger::Get().SetLevel(kpipeline::LogLevel::WARN);
   using namespace multi_task_nodes;
 
   std::cout << "--- Running Multi-Task Parallel Processing Example ---\n";

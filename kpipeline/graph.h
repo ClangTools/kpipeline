@@ -13,6 +13,8 @@
 #include <condition_variable>
 #include <functional>
 #include <set>
+
+#include "logger.h"
 #include "node.h"
 #include "workspace.h"
 #include "thread_pool.h"
@@ -73,13 +75,12 @@ namespace kpipeline
                 {
                   pool.Enqueue([this, &ws, &schedule_next, &profiler, enable_profiling, successor_name]
                   {
-                    std::cout << "[Thread " << std::this_thread::get_id() << "] Executing Node: " << successor_name <<
-                      std::endl;
+                    LOG_INFO("[Thread {}] Executing Node: {}", std::this_thread::get_id(), successor_name);
                     auto start_time = std::chrono::high_resolution_clock::now();
                     try { nodes_.at(successor_name)->Execute(ws); }
                     catch (const std::exception& e)
                     {
-                      std::cerr << "Exception in node '" << successor_name << "': " << e.what() << std::endl;
+                      LOG_ERROR("Exception in node '{}': {}", successor_name, e.what());
                     }
                     if (enable_profiling) profiler.End(successor_name, start_time);
                     schedule_next(successor_name);
@@ -115,19 +116,19 @@ namespace kpipeline
           }
         };
 
-      std::cout << "--- Starting Graph Execution with " << num_threads << " threads ---" << std::endl;
+      LOG_INFO("--- Starting Graph Execution with {} threads ---", num_threads);
       for (const auto& [name, node] : nodes_)
       {
         if (in_degree.at(name) == 0)
         {
           pool.Enqueue([this, &ws, &schedule_next, &profiler, enable_profiling, name]
           {
-            std::cout << "[Thread " << std::this_thread::get_id() << "] Executing Node: " << name << std::endl;
+            LOG_INFO("[Thread {}] Executing Node: {}", std::this_thread::get_id(), name);
             auto start_time = std::chrono::high_resolution_clock::now();
             try { nodes_.at(name)->Execute(ws); }
             catch (const std::exception& e)
             {
-              std::cerr << "Exception in node '" << name << "': " << e.what() << std::endl;
+              LOG_ERROR("Exception in node '{}': {}", name, e.what());
             }
             if (enable_profiling) profiler.End(name, start_time);
             schedule_next(name);
@@ -138,7 +139,7 @@ namespace kpipeline
       std::unique_lock<std::mutex> lock(completion_mutex);
       cv_completion.wait(lock, [&] { return finished_nodes_count.load() == total_graph_nodes; });
 
-      std::cout << "--- Graph Execution Finished ---" << std::endl;
+      LOG_INFO("--- Graph Execution Finished ---");
 
       // 在图执行完毕后打印报告
       if (enable_profiling)
