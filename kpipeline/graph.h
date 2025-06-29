@@ -48,14 +48,17 @@ namespace kpipeline
       std::mutex completion_mutex;
       std::condition_variable cv_completion;
 
-      std::function<void(const std::string&)> schedule_next;
-      std::function<void(const std::string&)> prune_branch;
+      // ======================== 统一调度逻辑 ========================
 
-      auto task_wrapper = [this, &ws, &schedule_next, &profiler, enable_profiling, &cv_completion
-        ](const std::string& node_name)
+      // 单个节点执行的核心逻辑
+      auto task_wrapper = [this, &ws, &profiler, enable_profiling, &cv_completion](const std::string& node_name,
+        const std::function<void(const std::string&)>& on_finish)
       {
-        // 如果图已经失败，则不执行任何新任务
-        if (graph_failed_.load()) { return; }
+        if (graph_failed_.load())
+        {
+          on_finish(node_name); // 如果图已失败，直接标记为完成
+          return;
+        }
 
         try
         {
@@ -65,109 +68,107 @@ namespace kpipeline
           nodes_.at(node_name)->Execute(ws);
 
           if (enable_profiling) profiler.End(node_name, start_time);
-          schedule_next(node_name);
         }
         catch (const std::exception& e)
         {
           std::lock_guard<std::mutex> lock(exception_mutex_);
-          // 只记录第一个发生的异常
           if (!first_exception_)
           {
             first_exception_ = std::current_exception();
             graph_failed_ = true;
             LOG_INFO("!!! Graph execution failed in node '{}'. Halting all operations. Error:{}", node_name, e.what());
           }
-          // 唤醒主线程，让它提前结束并重新抛出异常
-          cv_completion.notify_one();
         }
+        on_finish(node_name);
       };
 
-      schedule_next = [this, &ws, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, &
-          task_wrapper, &prune_branch](const std::string& completed_node_name)
+      // 统一的完成处理函数
+      std::function<void(const std::string&)> on_node_finished;
+      on_node_finished =
+        [this, &ws, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, &task_wrapper, &
+          on_node_finished](const std::string& finished_node_name)
         {
-          if (graph_failed_.load())
+          if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes)
           {
-            // 如果图已失败，我们仍需增加计数器以最终结束等待，但不再调度
-            if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes) { cv_completion.notify_one(); }
-            return;
+            cv_completion.notify_one();
           }
 
-          if (adj.count(completed_node_name))
+          if (adj.count(finished_node_name))
           {
-            for (const auto& successor_name : adj.at(completed_node_name))
+            for (const auto& successor_name : adj.at(finished_node_name))
             {
               if (--in_degree.at(successor_name) == 0)
               {
                 bool can_run = true;
-                const auto& successor_node = nodes_.at(successor_name);
-                for (const auto& control_input : successor_node->GetControlInputs())
+                if (graph_failed_.load())
                 {
-                  if (!ws.Has(control_input))
-                  {
-                    can_run = false;
-                    break;
-                  }
-                }
-                if (can_run)
-                {
-                  pool.Enqueue(task_wrapper, successor_name);
+                  // 如果图已失败，所有后续节点都不能运行
+                  can_run = false;
                 }
                 else
                 {
-                  prune_branch(successor_name);
+                  const auto& successor_node = nodes_.at(successor_name);
+                  for (const auto& control_input : successor_node->GetControlInputs())
+                  {
+                    if (!ws.Has(control_input))
+                    {
+                      can_run = false;
+                      break;
+                    }
+                  }
                 }
+
+                // 无论是执行还是剪枝，都提交一个新任务来处理，以释放当前线程
+                pool.Enqueue([this, can_run, successor_name, &task_wrapper, &on_node_finished]()
+                {
+                  if (can_run)
+                  {
+                    task_wrapper(successor_name, on_node_finished);
+                  }
+                  else
+                  {
+                    LOG_INFO("    > Pruning branch at node: {}", successor_name);
+                    on_node_finished(successor_name); // 被剪枝的节点直接标记为完成
+                  }
+                });
               }
             }
           }
-
-          if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes)
-          {
-            cv_completion.notify_one();
-          }
         };
 
-      prune_branch = [this, &adj, &in_degree, &finished_nodes_count, total_graph_nodes, &cv_completion, &prune_branch](
-        const std::string& pruned_node_name)
-        {
-          if (graph_failed_.load())
-          {
-            if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes) { cv_completion.notify_one(); }
-            return;
-          }
-
-          if (adj.count(pruned_node_name))
-          {
-            for (const auto& successor_name : adj.at(pruned_node_name))
-            {
-              if (--in_degree.at(successor_name) == 0) { prune_branch(successor_name); }
-            }
-          }
-          if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes)
-          {
-            cv_completion.notify_one();
-          }
-        };
+      // ======================== 结束 ========================
 
       LOG_INFO("--- Starting Graph Execution with {} threads ---", num_threads);
+      bool has_started = false;
       for (const auto& [name, node] : nodes_)
       {
         if (in_degree.at(name) == 0)
         {
-          pool.Enqueue(task_wrapper, name);
+          has_started = true;
+          // 启动初始节点
+          pool.Enqueue(task_wrapper, name, on_node_finished);
         }
       }
 
+      if (!has_started && total_graph_nodes > 0)
+      {
+        throw PipelineException("Graph has no entry points, but is not empty.");
+      }
+
       std::unique_lock<std::mutex> lock(completion_mutex);
-      // 等待条件：所有节点完成 或 图执行失败
       cv_completion.wait(lock, [&]
       {
-        return finished_nodes_count.load() == total_graph_nodes || graph_failed_.load();
+        // 等待条件：所有节点完成(无论是执行还是剪枝) 或 图执行失败
+        return finished_nodes_count.load() >= total_graph_nodes || graph_failed_.load();
       });
+
+      // 在重新抛出异常前，确保线程池被正确关闭，避免析构函数中任务队列还有任务
+      // ThreadPool 的析构函数会等待所有任务完成，这正是我们需要的
+      // 如果需要强制停止，ThreadPool 需要一个更复杂的停止机制
 
       if (graph_failed_.load())
       {
         LOG_WARN("--- Graph Execution Halted Due to Error ---");
-        // 等待线程池中的现有任务完成或退出，以避免悬空引用
       }
       else
       {
@@ -179,7 +180,6 @@ namespace kpipeline
         profiler.PrintReport();
       }
 
-      // 如果有异常，就在主线程中重新抛出它
       if (first_exception_)
       {
         std::rethrow_exception(first_exception_);
@@ -251,8 +251,6 @@ namespace kpipeline
     }
 
     std::map<std::string, std::shared_ptr<Node>> nodes_;
-
-    // --- 用于快速失败的成员 ---
     std::atomic<bool> graph_failed_;
     std::mutex exception_mutex_;
     std::exception_ptr first_exception_;
