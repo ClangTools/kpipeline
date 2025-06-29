@@ -13,7 +13,7 @@
 #include <condition_variable>
 #include <functional>
 #include <set>
-
+#include <exception>
 #include "logger.h"
 #include "node.h"
 #include "workspace.h"
@@ -31,12 +31,12 @@ namespace kpipeline
       nodes_[node->GetName()] = node;
     }
 
-    // 新增 enable_profiling 参数
     void Run(Workspace& ws, size_t num_threads = std::thread::hardware_concurrency(), bool enable_profiling = false)
     {
       if (nodes_.empty()) return;
 
-      // 创建 Profiler 实例
+      graph_failed_ = false;
+      first_exception_ = nullptr;
       Profiler profiler;
 
       auto [adj, in_degree] = BuildDependencies();
@@ -51,9 +51,47 @@ namespace kpipeline
       std::function<void(const std::string&)> schedule_next;
       std::function<void(const std::string&)> prune_branch;
 
-      schedule_next = [this, &ws, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, &
-          schedule_next, &prune_branch, &profiler, enable_profiling](const std::string& completed_node_name)
+      auto task_wrapper = [this, &ws, &schedule_next, &profiler, enable_profiling, &cv_completion
+        ](const std::string& node_name)
+      {
+        // 如果图已经失败，则不执行任何新任务
+        if (graph_failed_.load()) { return; }
+
+        try
         {
+          LOG_INFO("[Thread {}] Executing Node: {}", std::this_thread::get_id(), node_name);
+          auto start_time = std::chrono::high_resolution_clock::now();
+
+          nodes_.at(node_name)->Execute(ws);
+
+          if (enable_profiling) profiler.End(node_name, start_time);
+          schedule_next(node_name);
+        }
+        catch (const std::exception& e)
+        {
+          std::lock_guard<std::mutex> lock(exception_mutex_);
+          // 只记录第一个发生的异常
+          if (!first_exception_)
+          {
+            first_exception_ = std::current_exception();
+            graph_failed_ = true;
+            LOG_INFO("!!! Graph execution failed in node '{}'. Halting all operations. Error:{}", node_name, e.what());
+          }
+          // 唤醒主线程，让它提前结束并重新抛出异常
+          cv_completion.notify_one();
+        }
+      };
+
+      schedule_next = [this, &ws, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, &
+          task_wrapper, &prune_branch](const std::string& completed_node_name)
+        {
+          if (graph_failed_.load())
+          {
+            // 如果图已失败，我们仍需增加计数器以最终结束等待，但不再调度
+            if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes) { cv_completion.notify_one(); }
+            return;
+          }
+
           if (adj.count(completed_node_name))
           {
             for (const auto& successor_name : adj.at(completed_node_name))
@@ -70,21 +108,9 @@ namespace kpipeline
                     break;
                   }
                 }
-
                 if (can_run)
                 {
-                  pool.Enqueue([this, &ws, &schedule_next, &profiler, enable_profiling, successor_name]
-                  {
-                    LOG_INFO("[Thread {}] Executing Node: {}", std::this_thread::get_id(), successor_name);
-                    auto start_time = std::chrono::high_resolution_clock::now();
-                    try { nodes_.at(successor_name)->Execute(ws); }
-                    catch (const std::exception& e)
-                    {
-                      LOG_ERROR("Exception in node '{}': {}", successor_name, e.what());
-                    }
-                    if (enable_profiling) profiler.End(successor_name, start_time);
-                    schedule_next(successor_name);
-                  });
+                  pool.Enqueue(task_wrapper, successor_name);
                 }
                 else
                 {
@@ -100,9 +126,15 @@ namespace kpipeline
           }
         };
 
-      prune_branch = [&adj, &in_degree, &finished_nodes_count, total_graph_nodes, &cv_completion, &prune_branch](
+      prune_branch = [this, &adj, &in_degree, &finished_nodes_count, total_graph_nodes, &cv_completion, &prune_branch](
         const std::string& pruned_node_name)
         {
+          if (graph_failed_.load())
+          {
+            if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes) { cv_completion.notify_one(); }
+            return;
+          }
+
           if (adj.count(pruned_node_name))
           {
             for (const auto& successor_name : adj.at(pruned_node_name))
@@ -121,30 +153,36 @@ namespace kpipeline
       {
         if (in_degree.at(name) == 0)
         {
-          pool.Enqueue([this, &ws, &schedule_next, &profiler, enable_profiling, name]
-          {
-            LOG_INFO("[Thread {}] Executing Node: {}", std::this_thread::get_id(), name);
-            auto start_time = std::chrono::high_resolution_clock::now();
-            try { nodes_.at(name)->Execute(ws); }
-            catch (const std::exception& e)
-            {
-              LOG_ERROR("Exception in node '{}': {}", name, e.what());
-            }
-            if (enable_profiling) profiler.End(name, start_time);
-            schedule_next(name);
-          });
+          pool.Enqueue(task_wrapper, name);
         }
       }
 
       std::unique_lock<std::mutex> lock(completion_mutex);
-      cv_completion.wait(lock, [&] { return finished_nodes_count.load() == total_graph_nodes; });
+      // 等待条件：所有节点完成 或 图执行失败
+      cv_completion.wait(lock, [&]
+      {
+        return finished_nodes_count.load() == total_graph_nodes || graph_failed_.load();
+      });
 
-      LOG_INFO("--- Graph Execution Finished ---");
+      if (graph_failed_.load())
+      {
+        LOG_WARN("--- Graph Execution Halted Due to Error ---");
+        // 等待线程池中的现有任务完成或退出，以避免悬空引用
+      }
+      else
+      {
+        LOG_INFO("--- Graph Execution Finished Successfully ---");
+      }
 
-      // 在图执行完毕后打印报告
       if (enable_profiling)
       {
         profiler.PrintReport();
+      }
+
+      // 如果有异常，就在主线程中重新抛出它
+      if (first_exception_)
+      {
+        std::rethrow_exception(first_exception_);
       }
     }
 
@@ -213,6 +251,11 @@ namespace kpipeline
     }
 
     std::map<std::string, std::shared_ptr<Node>> nodes_;
+
+    // --- 用于快速失败的成员 ---
+    std::atomic<bool> graph_failed_;
+    std::mutex exception_mutex_;
+    std::exception_ptr first_exception_;
   };
 } // namespace kpipeline
 #endif // KPIPELINE_GRAPH_H_
