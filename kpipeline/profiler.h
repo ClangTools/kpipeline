@@ -67,25 +67,27 @@ namespace kpipeline
                                                 return sum + r.duration.count();
                                               });
 
-      std::cout << "\n--- Profiling Report ---\n";
-      std::cout << std::left << std::setw(30) << "Node Name"
+      std::stringstream oss;
+      oss << "\n--- Profiling Report ---\n";
+      oss << std::left << std::setw(30) << "Node Name"
         << std::right << std::setw(15) << "Duration (ms)"
         << std::setw(10) << "% of Total" << std::endl;
-      std::cout << std::string(55, '-') << std::endl;
+      oss << std::string(55, '-') << std::endl;
 
       for (const auto& result : results_copy)
       {
         double percentage = (total_duration > 0) ? (result.duration.count() / total_duration * 100.0) : 0.0;
-        std::cout << std::left << std::setw(30) << result.node_name
+        oss << std::left << std::setw(30) << result.node_name
           << std::right << std::setw(15) << std::fixed << std::setprecision(3) << result.duration.count()
           << std::setw(9) << std::fixed << std::setprecision(1) << percentage << "%"
           << std::endl;
       }
 
-      std::cout << std::string(55, '-') << std::endl;
-      std::cout << std::left << std::setw(30) << "Total (Sum of durations)"
+      oss << std::string(55, '-') << std::endl;
+      oss << std::left << std::setw(30) << "Total (Sum of durations)"
         << std::right << std::setw(15) << std::fixed << std::setprecision(3) << total_duration
         << std::endl;
+      std::cout << oss.str();
     }
 
   private:
