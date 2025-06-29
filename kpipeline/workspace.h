@@ -5,7 +5,7 @@
 #include <map>
 #include <stdexcept>
 #include <string>
-#include <mutex>
+#include <shared_mutex>
 
 namespace kpipeline
 {
@@ -22,8 +22,7 @@ namespace kpipeline
     template <typename T>
     void Set(const std::string& name, T&& data)
     {
-      // 在写入前加锁
-      std::lock_guard<std::mutex> lock(mutex_);
+      std::unique_lock<std::shared_mutex> lock(mutex_);
       data_[name] = std::forward<T>(data);
     }
 
@@ -34,7 +33,7 @@ namespace kpipeline
     T Get(const std::string& name) const
     {
       // 在读取前加锁
-      std::lock_guard<std::mutex> lock(mutex_);
+      std::shared_lock<std::shared_mutex> lock(mutex_);
       try
       {
         return std::any_cast<T>(data_.at(name));
@@ -55,13 +54,13 @@ namespace kpipeline
     // 检查数据是否存在
     bool Has(const std::string& name) const
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      std::shared_lock<std::shared_mutex> lock(mutex_);
       return data_.count(name) > 0;
     }
 
     std::any GetAny(const std::string& name) const
     {
-      std::lock_guard<std::mutex> lock(mutex_);
+      std::shared_lock<std::shared_mutex> lock(mutex_);
       try
       {
         return data_.at(name);
@@ -74,7 +73,7 @@ namespace kpipeline
 
   private:
     // 使用 mutable 关键字，以便在 const 方法中也能锁定互斥锁
-    mutable std::mutex mutex_;
+    mutable std::shared_mutex mutex_;
     std::map<std::string, std::any> data_;
   };
 } // namespace kpipeline
