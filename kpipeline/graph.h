@@ -41,7 +41,7 @@ namespace kpipeline
 
       auto [adj, in_degree] = BuildDependencies();
 
-      ThreadPool pool(num_threads);
+      ThreadPool pool(std::max(num_threads, static_cast<size_t>(1)));
       std::atomic<size_t> finished_nodes_count(0);
       size_t total_graph_nodes = nodes_.size();
 
