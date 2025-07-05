@@ -168,7 +168,8 @@ namespace kpipeline
 
       if (graph_failed_.load())
       {
-        LOG_WARN("--- Graph Execution Halted Due to Error ---");
+        // LOG_WARN("--- Graph Execution Halted Due to Error ---");
+        LOG_INFO("--- Graph Execution Halted Due to Error ---");
       }
       else
       {
