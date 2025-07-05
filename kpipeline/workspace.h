@@ -6,6 +6,7 @@
 #include <stdexcept>
 #include <string>
 #include <shared_mutex>
+#include <mutex>
 
 namespace kpipeline
 {
