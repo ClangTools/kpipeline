@@ -14,6 +14,7 @@
 #include <functional>
 #include <set>
 #include <exception>
+#include <algorithm> // For std::max
 #include "logger.h"
 #include "node.h"
 #include "workspace.h"
@@ -50,49 +51,50 @@ namespace kpipeline
 
       // ======================== 统一调度逻辑 ========================
 
-      // 单个节点执行的核心逻辑
-      auto task_wrapper = [this, &ws, &profiler, enable_profiling, &cv_completion](const std::string& node_name,
-        const std::function<void(const std::string&)>& on_finish)
-      {
-        if (graph_failed_.load())
-        {
-          on_finish(node_name); // 如果图已失败，直接标记为完成
-          return;
-        }
+      // 使用 shared_ptr 来管理 lambda 的生命周期，防止悬空引用
+      auto on_node_finished_ptr = std::make_shared<std::function<void(const std::string&)>>();
+      auto task_wrapper_ptr = std::make_shared<std::function<void(const std::string&,
+                                                                  const std::function<void(const std::string&)>&)>>();
 
-        try
+      // 定义任务执行的核心逻辑
+      *task_wrapper_ptr = [this, &ws, &profiler, enable_profiling, &cv_completion]
+      (const std::string& node_name, const std::function<void(const std::string&)>& on_finish)
         {
-          LOG_INFO("[Thread {}] Executing Node: {}", std::this_thread::get_id(), node_name);
-          auto start_time = std::chrono::high_resolution_clock::now();
-
-          nodes_.at(node_name)->Execute(ws);
-
-          if (enable_profiling) profiler.End(node_name, start_time);
-        }
-        catch (const std::exception& e)
-        {
-          std::lock_guard<std::mutex> lock(exception_mutex_);
-          if (!first_exception_)
+          if (graph_failed_.load())
           {
-            first_exception_ = std::current_exception();
-            graph_failed_ = true;
-            LOG_INFO("!!! Graph execution failed in node '{}'. Halting all operations. Error:{}", node_name, e.what());
-          }
-        }
-        on_finish(node_name);
-      };
-
-      // 统一的完成处理函数
-      std::function<void(const std::string&)> on_node_finished;
-      on_node_finished =
-        [this, &ws, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, &task_wrapper, &
-          on_node_finished](const std::string& finished_node_name)
-        {
-          if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes)
-          {
-            cv_completion.notify_one();
+            on_finish(node_name);
+            return;
           }
 
+          try
+          {
+            LOG_INFO("[Thread {}] Executing Node: {}", std::this_thread::get_id(), node_name);
+            auto start_time = std::chrono::high_resolution_clock::now();
+            nodes_.at(node_name)->Execute(ws);
+            if (enable_profiling) profiler.End(node_name, start_time);
+          }
+          catch (const std::exception& e)
+          {
+            std::lock_guard<std::mutex> lock(exception_mutex_);
+            if (!first_exception_)
+            {
+              first_exception_ = std::current_exception();
+              graph_failed_ = true;
+              LOG_INFO("!!! Graph execution failed in node '{}'. Halting all operations. Error:{}", node_name,
+                       e.what());
+              // 失败时也需要唤醒主线程
+              cv_completion.notify_one();
+            }
+          }
+          on_finish(node_name);
+        };
+
+      // 定义完成处理函数
+      *on_node_finished_ptr =
+        [this, &ws, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, task_wrapper_ptr,
+          on_node_finished_ptr]
+      (const std::string& finished_node_name)
+        {
           if (adj.count(finished_node_name))
           {
             for (const auto& successor_name : adj.at(finished_node_name))
@@ -102,7 +104,6 @@ namespace kpipeline
                 bool can_run = true;
                 if (graph_failed_.load())
                 {
-                  // 如果图已失败，所有后续节点都不能运行
                   can_run = false;
                 }
                 else
@@ -118,21 +119,26 @@ namespace kpipeline
                   }
                 }
 
-                // 无论是执行还是剪枝，都提交一个新任务来处理，以释放当前线程
-                pool.Enqueue([this, can_run, successor_name, &task_wrapper, &on_node_finished]()
+                // 捕获 shared_ptr 的拷贝，而不是引用
+                pool.Enqueue([this, can_run, successor_name, task_wrapper_ptr, on_node_finished_ptr]()
                 {
                   if (can_run)
                   {
-                    task_wrapper(successor_name, on_node_finished);
+                    (*task_wrapper_ptr)(successor_name, *on_node_finished_ptr);
                   }
                   else
                   {
                     LOG_INFO("    > Pruning branch at node: {}", successor_name);
-                    on_node_finished(successor_name); // 被剪枝的节点直接标记为完成
+                    (*on_node_finished_ptr)(successor_name);
                   }
                 });
               }
             }
+          }
+
+          if (finished_nodes_count.fetch_add(1) + 1 == total_graph_nodes)
+          {
+            cv_completion.notify_one();
           }
         };
 
@@ -146,7 +152,10 @@ namespace kpipeline
         {
           has_started = true;
           // 启动初始节点
-          pool.Enqueue(task_wrapper, name, on_node_finished);
+          pool.Enqueue([task_wrapper_ptr, name, on_node_finished_ptr]
+          {
+            (*task_wrapper_ptr)(name, *on_node_finished_ptr);
+          });
         }
       }
 
@@ -158,17 +167,11 @@ namespace kpipeline
       std::unique_lock<std::mutex> lock(completion_mutex);
       cv_completion.wait(lock, [&]
       {
-        // 等待条件：所有节点完成(无论是执行还是剪枝) 或 图执行失败
         return finished_nodes_count.load() >= total_graph_nodes || graph_failed_.load();
       });
 
-      // 在重新抛出异常前，确保线程池被正确关闭，避免析构函数中任务队列还有任务
-      // ThreadPool 的析构函数会等待所有任务完成，这正是我们需要的
-      // 如果需要强制停止，ThreadPool 需要一个更复杂的停止机制
-
       if (graph_failed_.load())
       {
-        // LOG_WARN("--- Graph Execution Halted Due to Error ---");
         LOG_INFO("--- Graph Execution Halted Due to Error ---");
       }
       else
