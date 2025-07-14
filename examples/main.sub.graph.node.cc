@@ -26,7 +26,7 @@ namespace user_analysis_nodes
   class LoadUserProfileNode : public kpipeline::Node
   {
   public:
-    explicit LoadUserProfileNode(const Json::Value& config) : Node(config)
+    explicit LoadUserProfileNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -45,7 +45,7 @@ namespace user_analysis_nodes
   class GenerateFinalUserReportNode : public kpipeline::Node
   {
   public:
-    explicit GenerateFinalUserReportNode(const Json::Value& config) : Node(config)
+    explicit GenerateFinalUserReportNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -69,7 +69,7 @@ namespace user_analysis_nodes
   class ExtractPhotoPathsNode : public kpipeline::Node
   {
   public:
-    explicit ExtractPhotoPathsNode(const Json::Value& config) : Node(config)
+    explicit ExtractPhotoPathsNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -85,7 +85,7 @@ namespace user_analysis_nodes
   class AnalyzeColorsNode : public kpipeline::Node
   {
   public:
-    explicit AnalyzeColorsNode(const Json::Value& config) : Node(config)
+    explicit AnalyzeColorsNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -106,7 +106,7 @@ namespace user_analysis_nodes
   class CountObjectsNode : public kpipeline::Node
   {
   public:
-    explicit CountObjectsNode(const Json::Value& config) : Node(config)
+    explicit CountObjectsNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -127,7 +127,7 @@ namespace user_analysis_nodes
   class CompilePhotoReportNode : public kpipeline::Node
   {
   public:
-    explicit CompilePhotoReportNode(const Json::Value& config) : Node(config)
+    explicit CompilePhotoReportNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -149,7 +149,7 @@ namespace user_analysis_nodes
   class SubGraphNode : public kpipeline::Node
   {
   public:
-    explicit SubGraphNode(const Json::Value& config) : Node(config)
+    explicit SubGraphNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
       subgraph_config_path_ = config["params"]["config_path"].asString();
       // 可以在这里获取其他参数，比如线程数

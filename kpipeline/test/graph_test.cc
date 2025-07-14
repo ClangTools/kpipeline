@@ -1,4 +1,5 @@
 #include "kpipeline/graph.h"
+#include <utility>
 #include "gtest/gtest.h"
 
 // --- 在测试文件中定义简单的节点用于测试 ---
@@ -9,7 +10,7 @@ class AddOneNode : public kpipeline::Node
 public:
   // 为了测试方便，我们绕开 JSON 构造
   AddOneNode(std::string name, std::string input, std::string output)
-    : Node(CreateConfig(name, {input}, {output}))
+    : Node(std::move(name), {std::move(input)}, {std::move(output)})
   {
   }
 
@@ -19,16 +20,6 @@ public:
     ws.Set(outputs_.at(0), val + 1);
   }
 
-private:
-  static Json::Value CreateConfig(const std::string& name, const std::vector<std::string>& inputs,
-                                  const std::vector<std::string>& outputs)
-  {
-    Json::Value config;
-    config["name"] = name;
-    for (const auto& i : inputs) config["inputs"].append(i);
-    for (const auto& o : outputs) config["outputs"].append(o);
-    return config;
-  }
 };
 
 // 一个简单的节点，将输入乘以二
@@ -36,7 +27,7 @@ class MultiplyByTwoNode : public kpipeline::Node
 {
 public:
   MultiplyByTwoNode(std::string name, std::string input, std::string output)
-    : Node(CreateConfig(name, {input}, {output}))
+    : Node(std::move(name), {std::move(input)}, {std::move(output)})
   {
   }
 
@@ -46,16 +37,6 @@ public:
     ws.Set(outputs_.at(0), val * 2);
   }
 
-private:
-  static Json::Value CreateConfig(const std::string& name, const std::vector<std::string>& inputs,
-                                  const std::vector<std::string>& outputs)
-  {
-    Json::Value config;
-    config["name"] = name;
-    for (const auto& i : inputs) config["inputs"].append(i);
-    for (const auto& o : outputs) config["outputs"].append(o);
-    return config;
-  }
 };
 
 // 测试一个简单的线性图 (A->B)

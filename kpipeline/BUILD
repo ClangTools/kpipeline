@@ -32,12 +32,10 @@ cc_library(
 # 节点库
 cc_library(
     name = "node",
-    srcs = ["node.cc"],
     hdrs = ["node.h"],
     includes = ["."],
     deps = [
         ":workspace",
-        "@jsoncpp",
     ],
 )
 

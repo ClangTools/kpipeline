@@ -15,7 +15,7 @@ namespace conditional_nodes
   class LoadNumberNode : public kpipeline::Node
   {
   public:
-    explicit LoadNumberNode(const Json::Value& config) : Node(config)
+    explicit LoadNumberNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -33,7 +33,7 @@ namespace conditional_nodes
   class RouterNode : public kpipeline::Node
   {
   public:
-    explicit RouterNode(const Json::Value& config) : Node(config)
+    explicit RouterNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -59,7 +59,7 @@ namespace conditional_nodes
   class ProcessBranchNode : public kpipeline::Node
   {
   public:
-    explicit ProcessBranchNode(const Json::Value& config) : Node(config)
+    explicit ProcessBranchNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
       message_ = config["params"]["message"].asString();
     }
@@ -86,7 +86,7 @@ namespace conditional_nodes
   class CollectResultNode : public kpipeline::Node
   {
   public:
-    explicit CollectResultNode(const Json::Value& config) : Node(config)
+    explicit CollectResultNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 

@@ -9,16 +9,19 @@
 #include <json/json.h>
 #include "node.h"
 
-namespace kpipeline {
+namespace kpipeline
+{
+  using NodeCreator = std::function<std::shared_ptr<Node>(const Json::Value& config)>;
 
-  using NodeCreator = std::function<std::shared_ptr<Node>(const Json::Value&)>;
 
-  class NodeFactory {
+  class NodeFactory
+  {
   public:
     static NodeFactory& Instance();
 
-    bool Register(const std::string& type, NodeCreator creator);
+    bool Register(const std::string& type, const NodeCreator& creator);
     std::shared_ptr<Node> Create(const Json::Value& config);
+    static std::shared_ptr<Node> Build(const Json::Value& config);
 
   private:
     NodeFactory() = default;
@@ -37,7 +40,6 @@ return std::make_shared<NodeType>(config);                                 \
 const bool registered_##NodeType =                                             \
 kpipeline::NodeFactory::Instance().Register(#NodeType, Creator_##NodeType); \
 }
-
 } // namespace kpipeline
 
 #endif // KPIPELINE_NODE_FACTORY_H_

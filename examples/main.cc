@@ -13,7 +13,7 @@ namespace nodes
   class LoadNumbersNode : public kpipeline::Node
   {
   public:
-    explicit LoadNumbersNode(const Json::Value& config) : Node(config)
+    explicit LoadNumbersNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -29,7 +29,7 @@ namespace nodes
   class SumNode : public kpipeline::Node
   {
   public:
-    explicit SumNode(const Json::Value& config) : Node(config)
+    explicit SumNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -41,12 +41,22 @@ namespace nodes
     }
   };
 
-  REGISTER_NODE(SumNode);
+  // REGISTER_NODE(SumNode);
+  namespace
+  {
+    std::shared_ptr<kpipeline::Node> Creator_SumNode(const Json::Value& config)
+    {
+      return std::make_shared<SumNode>(config);
+    }
+
+    const bool registered_SumNode =
+      kpipeline::NodeFactory::Instance().Register("SumNode", Creator_SumNode);
+  }
 
   class AverageNode : public kpipeline::Node
   {
   public:
-    explicit AverageNode(const Json::Value& config) : Node(config)
+    explicit AverageNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
@@ -65,14 +75,18 @@ namespace nodes
 
   REGISTER_NODE(AverageNode);
 
-  class DummyProcessNode : public kpipeline::Node {
+  class DummyProcessNode : public kpipeline::Node
+  {
   public:
-    explicit DummyProcessNode(const Json::Value& config) : Node(config) {
+    explicit DummyProcessNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
+    {
       message_ = config.get("params", Json::Value(Json::objectValue))
-                      .get("message", "Default message")
-                      .asString();
+                       .get("message", "Default message")
+                       .asString();
     }
-    void Execute(kpipeline::Workspace& ws) const override {
+
+    void Execute(kpipeline::Workspace& ws) const override
+    {
       // ======================== 修复开始 ========================
       // 我们不需要读取输入值来保证执行顺序，调度器已经保证了。
       // 所以我们可以直接开始模拟工作。
@@ -83,15 +97,17 @@ namespace nodes
       ws.Set(outputs_.at(0), report);
       // ======================== 修复结束 ========================
     }
+
   private:
     std::string message_;
   };
+
   REGISTER_NODE(DummyProcessNode);
 
   class FinalReportNode : public kpipeline::Node
   {
   public:
-    explicit FinalReportNode(const Json::Value& config) : Node(config)
+    explicit FinalReportNode(const Json::Value& config) : Node(kpipeline::NodeFactory::Build(config))
     {
     }
 
