@@ -68,7 +68,7 @@ namespace kpipeline
 
           try
           {
-            LOG_INFO("[Thread {}] Executing Node: {}", std::this_thread::get_id(), node_name);
+            LOG_INFO("[Thread {}] Executing Node: {}", thread_id_to_string(std::this_thread::get_id()), node_name);
             auto start_time = std::chrono::high_resolution_clock::now();
             nodes_.at(node_name)->Execute(ws);
             if (enable_profiling) profiler.End(node_name, start_time);
