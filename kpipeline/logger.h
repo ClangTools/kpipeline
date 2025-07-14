@@ -11,6 +11,7 @@
 #include <fmt/format.h>
 #include <chrono>
 #include <ctime>
+#include <sstream>
 
 namespace kpipeline
 {
