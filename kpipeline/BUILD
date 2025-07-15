@@ -76,7 +76,6 @@ cc_library(
     includes = ["."],
     deps = [
         ":graph",
-        ":logger",
         ":node_factory",
     ],
 )

@@ -1,5 +1,11 @@
 alias(
     name = "kpipeline",
+    actual = "//kpipeline:graph",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "kpipeline-builder",
     actual = "//kpipeline:graph_builder",
     visibility = ["//visibility:public"],
 )

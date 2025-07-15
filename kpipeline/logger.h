@@ -7,7 +7,10 @@
 #include <condition_variable>
 #include <thread>
 #include <atomic>
-#include <cstring> // For strrchr
+#include <cstring>
+#include <sstream>
+#include <string>
+#include <iostream>
 #include <fmt/format.h>
 #include <chrono>
 #include <ctime>
