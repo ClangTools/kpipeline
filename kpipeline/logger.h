@@ -25,7 +25,7 @@ namespace kpipeline
     return oss.str();
   }
 
-  enum class LogLevel
+  enum LogLevel
   {
     DEBUG,
     INFO,

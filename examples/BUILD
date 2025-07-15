@@ -4,7 +4,7 @@ cc_binary(
     args = ["$(location :pipeline.json)"],
     data = ["pipeline.json"],
     deps = [
-        "@kpipeline",
+        "@kpipeline//:kpipeline-builder",
     ],
 )
 
@@ -15,7 +15,7 @@ cc_binary(
     # 更新数据依赖项为新的配置文件
     data = ["image_pipeline.json"],
     deps = [
-        "@kpipeline",
+        "@kpipeline//:kpipeline-builder",
     ],
 )
 
@@ -26,7 +26,7 @@ cc_binary(
     # 更新数据依赖项为新的配置文件
     data = ["conditional_pipeline.json"],
     deps = [
-        "@kpipeline",
+        "@kpipeline//:kpipeline-builder",
     ],
 )
 
@@ -38,7 +38,7 @@ cc_binary(
         "photo_analysis_subgraph.json",
     ],
     deps = [
-        "@kpipeline",
+        "@kpipeline//:kpipeline-builder",
     ],
 )
 
@@ -46,6 +46,6 @@ cc_binary(
     name = "multiple",
     srcs = ["main.multiple.cc"],
     deps = [
-        "@kpipeline",
+        "@kpipeline//:kpipeline-builder",
     ],
 )
