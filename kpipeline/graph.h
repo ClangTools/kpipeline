@@ -294,6 +294,10 @@ namespace kpipeline
       {
         ss << child_prefix << "  [Control: " << VectorToString(node->GetControlInputs()) << "]\n";
       }
+      if (node->IsExclusive())
+      {
+        ss << child_prefix << "  [IsExclusive]\n";
+      }
       ss << child_prefix << "  [Outputs: " << VectorToString(node->GetOutputs()) << "]\n";
 
       // 递归打印后继节点
