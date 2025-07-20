@@ -147,6 +147,7 @@ int main()
 
   try
   {
+    graph.Print();
     kpipeline::Workspace ws;
     ws.Set("source_id", 42);
 

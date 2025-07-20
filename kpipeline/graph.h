@@ -190,7 +190,87 @@ namespace kpipeline
       }
     }
 
+
+    void Print()
+    {
+      std::stringstream ss;
+      ss << "\n--- Graph Structure ---\n";
+
+      if (nodes_.empty())
+      {
+        ss << "(Empty Graph)\n";
+      }
+      else
+      {
+        auto [adj, in_degree] = BuildDependencies();
+        std::vector<std::string> entry_points;
+        for (const auto& [name, node] : nodes_)
+        {
+          if (in_degree.at(name) == 0)
+          {
+            entry_points.push_back(name);
+          }
+        }
+
+        std::set<std::string> visited_nodes;
+        for (const auto& entry_point : entry_points)
+        {
+          PrintNodeTree(ss, entry_point, "", true, visited_nodes, adj);
+        }
+      }
+      ss << "-----------------------\n";
+      // 一次性打印整个字符串块
+      LOG_INFO("{}", ss.str());
+    }
+
   private:
+    std::string VectorToString(const std::vector<std::string>& vec)
+    {
+      if (vec.empty()) return "{}";
+      std::stringstream ss_vec;
+      for (size_t i = 0; i < vec.size(); ++i)
+      {
+        ss_vec << (i == 0 ? "" : ", ") << vec[i];
+      }
+      return ss_vec.str();
+    }
+
+    void PrintNodeTree(std::stringstream& ss, const std::string& node_name, const std::string& prefix, bool is_last,
+                       std::set<std::string>& visited_nodes,
+                       const std::map<std::string, std::vector<std::string>>& adj)
+    {
+      const auto& node = nodes_.at(node_name);
+      ss << prefix << (is_last ? "└── " : "├── ") << node->GetName() << "\n";
+
+      std::string child_prefix = prefix + (is_last ? "    " : "│   ");
+
+      // 检查是否已经访问过
+      if (visited_nodes.count(node_name))
+      {
+        ss << child_prefix << "(...)\n";
+        return;
+      }
+      visited_nodes.insert(node_name);
+
+      // 打印详细信息
+      ss << child_prefix << "  [Inputs: " << VectorToString(node->GetInputs()) << "]\n";
+      if (!node->GetControlInputs().empty())
+      {
+        ss << child_prefix << "  [Control: " << VectorToString(node->GetControlInputs()) << "]\n";
+      }
+      ss << child_prefix << "  [Outputs: " << VectorToString(node->GetOutputs()) << "]\n";
+
+      // 递归打印后继节点
+      if (adj.count(node_name) && !adj.at(node_name).empty())
+      {
+        const auto& successors = adj.at(node_name);
+        for (size_t i = 0; i < successors.size(); ++i)
+        {
+          PrintNodeTree(ss, successors[i], child_prefix, (i == successors.size() - 1), visited_nodes, adj);
+        }
+      }
+    }
+
     std::pair<std::map<std::string, std::vector<std::string>>,
               std::map<std::string, std::atomic<int>>> BuildDependencies()
     {
