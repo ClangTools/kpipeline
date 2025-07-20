@@ -12,9 +12,10 @@
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+#include <shared_mutex>
 #include <set>
 #include <exception>
-#include <algorithm> // For std::max
+#include <algorithm>
 #include "logger.h"
 #include "node.h"
 #include "workspace.h"
@@ -40,6 +41,10 @@ namespace kpipeline
       first_exception_ = nullptr;
       Profiler profiler;
 
+      // ======================== 独占执行锁 ========================
+      std::shared_mutex exclusive_execution_mutex;
+      // =============================================================
+
       auto [adj, in_degree] = BuildDependencies();
 
       ThreadPool pool(std::max(num_threads, static_cast<size_t>(1)));
@@ -51,13 +56,13 @@ namespace kpipeline
 
       // ======================== 统一调度逻辑 ========================
 
-      // 使用 shared_ptr 来管理 lambda 的生命周期，防止悬空引用
+      // 定义任务执行的核心逻辑 使用 shared_ptr 来管理 lambda 的生命周期，防止悬空引用
       auto on_node_finished_ptr = std::make_shared<std::function<void(const std::string&)>>();
       auto task_wrapper_ptr = std::make_shared<std::function<void(const std::string&,
                                                                   const std::function<void(const std::string&)>&)>>();
 
-      // 定义任务执行的核心逻辑
-      *task_wrapper_ptr = [this, &ws, &profiler, enable_profiling, &cv_completion]
+      // task_wrapper 现在只负责执行，不再打印“Executing”日志
+      *task_wrapper_ptr = [this, &ws, &profiler, enable_profiling, &cv_completion, &exclusive_execution_mutex]
       (const std::string& node_name, const std::function<void(const std::string&)>& on_finish)
         {
           if (graph_failed_.load())
@@ -66,11 +71,24 @@ namespace kpipeline
             return;
           }
 
+          const auto& node = nodes_.at(node_name);
+          std::unique_ptr<std::shared_lock<std::shared_mutex>> shared_lk_ptr;
+          std::unique_ptr<std::unique_lock<std::shared_mutex>> unique_lk_ptr;
+
+          if (node->IsExclusive())
+          {
+            unique_lk_ptr = std::make_unique<std::unique_lock<std::shared_mutex>>(exclusive_execution_mutex);
+            LOG_INFO("    > Node '{}' acquired unique lock, pausing other tasks.", node_name);
+          }
+          else
+          {
+            shared_lk_ptr = std::make_unique<std::shared_lock<std::shared_mutex>>(exclusive_execution_mutex);
+          }
+
           try
           {
-            LOG_INFO("[Thread {}] Executing Node: {}", thread_id_to_string(std::this_thread::get_id()), node_name);
             auto start_time = std::chrono::high_resolution_clock::now();
-            nodes_.at(node_name)->Execute(ws);
+            node->Execute(ws);
             if (enable_profiling) profiler.End(node_name, start_time);
           }
           catch (const std::exception& e)
@@ -86,13 +104,18 @@ namespace kpipeline
               cv_completion.notify_one();
             }
           }
+          // 锁会在 unique_ptr 离开作用域时自动释放
+          if (node->IsExclusive())
+          {
+            LOG_INFO("    > Node '{}' finished, releasing unique lock.", node_name);
+          }
           on_finish(node_name);
         };
 
       // 定义完成处理函数
       *on_node_finished_ptr =
-        [this, &ws, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, task_wrapper_ptr,
-          on_node_finished_ptr]
+        [this, &adj, &in_degree, &pool, &finished_nodes_count, total_graph_nodes, &cv_completion, task_wrapper_ptr,
+          on_node_finished_ptr, &ws]
       (const std::string& finished_node_name)
         {
           if (adj.count(finished_node_name))
@@ -101,14 +124,11 @@ namespace kpipeline
             {
               if (--in_degree.at(successor_name) == 0)
               {
+                const auto& successor_node = nodes_.at(successor_name);
                 bool can_run = true;
-                if (graph_failed_.load())
-                {
-                  can_run = false;
-                }
+                if (graph_failed_.load()) { can_run = false; }
                 else
                 {
-                  const auto& successor_node = nodes_.at(successor_name);
                   for (const auto& control_input : successor_node->GetControlInputs())
                   {
                     if (!ws.Has(control_input))
@@ -119,8 +139,26 @@ namespace kpipeline
                   }
                 }
 
-                // 捕获 shared_ptr 的拷贝，而不是引用
-                pool.Enqueue([this, can_run, successor_name, task_wrapper_ptr, on_node_finished_ptr]()
+                // 在入队前打印日志！
+                if (can_run)
+                {
+                  if (successor_node->IsExclusive())
+                  {
+                    LOG_INFO("Node '{}' is exclusive, scheduling and waiting for other tasks to finish...",
+                             successor_name);
+                  }
+                  else
+                  {
+                    LOG_INFO("[Thread {}] Scheduling Node: {}", thread_id_to_string(std::this_thread::get_id()),
+                             successor_name);
+                  }
+                }
+                else
+                {
+                  LOG_INFO("    > Pruning branch at node: {}", successor_name);
+                }
+
+                pool.Enqueue([can_run, successor_name, task_wrapper_ptr, on_node_finished_ptr]()
                 {
                   if (can_run)
                   {
@@ -128,8 +166,7 @@ namespace kpipeline
                   }
                   else
                   {
-                    LOG_INFO("    > Pruning branch at node: {}", successor_name);
-                    (*on_node_finished_ptr)(successor_name);
+                    (*on_node_finished_ptr)(successor_name); // 直接调用完成，触发下游剪枝
                   }
                 });
               }
@@ -141,7 +178,6 @@ namespace kpipeline
             cv_completion.notify_one();
           }
         };
-
       // ======================== 结束 ========================
 
       LOG_INFO("--- Starting Graph Execution with {} threads ---", num_threads);
@@ -151,7 +187,7 @@ namespace kpipeline
         if (in_degree.at(name) == 0)
         {
           has_started = true;
-          // 启动初始节点
+          LOG_INFO("[Thread Main] Scheduling initial Node: {}", name);
           pool.Enqueue([task_wrapper_ptr, name, on_node_finished_ptr]
           {
             (*task_wrapper_ptr)(name, *on_node_finished_ptr);

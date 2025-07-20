@@ -36,6 +36,8 @@ namespace kpipeline
     // ====== 显式声明默认的移动赋值运算符（C++11 及更高版本） ======
     // 这可以提高使用临时对象或右值赋值时的性能。
     Node& operator=(Node&& other) noexcept = default;
+    // 用于标记节点是否需要独占执行
+    bool IsExclusive() const { return exclusive_; }
 
   protected:
     // 不依赖 JSON 的构造函数，供纯代码定义图时使用
@@ -71,8 +73,9 @@ namespace kpipeline
     std::string name_;
     std::vector<std::string> inputs_;
     std::vector<std::string> outputs_;
-    // 新增：控制依赖
+    // 控制依赖
     std::vector<std::string> control_inputs_;
+    bool exclusive_{false};
   };
 } // namespace kpipeline
 

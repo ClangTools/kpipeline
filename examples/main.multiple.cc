@@ -65,6 +65,7 @@ namespace multi_task_nodes
     GeneratePreviewNode()
       : Node("PreviewGenerator", {"source_data"}, {"preview_result"})
     {
+      this->exclusive_ = true;
     }
 
     void Execute(kpipeline::Workspace& ws) const override
