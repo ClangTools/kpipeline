@@ -80,6 +80,5 @@ jobs:
       - name: Bazel Build examples
         run: |
           cd examples
-          bazel build example
-          bazel build image
+          bazel build //...
           cd ..

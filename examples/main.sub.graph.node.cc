@@ -168,10 +168,10 @@ namespace user_analysis_nodes
       kpipeline::Workspace sub_ws;
 
       // 2. 将父图的输入映射到子图的工作空间
-      //    使用新的 GetAny 方法来正确复制数据
+      //    使用 SetAny + GetAny 避免对 std::any 的二次包装，保持原始类型
       for (const auto& input_name : inputs_)
       {
-        sub_ws.Set(input_name, parent_ws.GetAny(input_name));
+        sub_ws.SetAny(input_name, parent_ws.GetAny(input_name));
       }
 
       // 3. 构建并运行子图
@@ -185,10 +185,10 @@ namespace user_analysis_nodes
       // ======================== 修复结束 ========================
 
       // 4. 将子图的输出映射回父图的工作空间
+      //    同样使用 SetAny + GetAny 保持原始类型
       for (const auto& output_name : outputs_)
       {
-        // 同样使用 GetAny
-        parent_ws.Set(output_name, sub_ws.GetAny(output_name));
+        parent_ws.SetAny(output_name, sub_ws.GetAny(output_name));
       }
 
       std::cout << "    > Exiting SubGraph." << std::endl;
@@ -205,10 +205,16 @@ namespace user_analysis_nodes
 
 int main(int argc, char* argv[])
 {
+  if (argc != 2)
+  {
+    std::cerr << "Usage: " << argv[0] << " <path_to_main_pipeline.json>" << std::endl;
+    return 1;
+  }
+
   std::cout << "--- Running User Profile Analysis Pipeline ---" << std::endl;
   try
   {
-    auto graph = kpipeline::GraphBuilder::FromFile("examples/main_pipeline.json");
+    auto graph = kpipeline::GraphBuilder::FromFile(argv[1]);
 
     kpipeline::Workspace ws;
     ws.Set("user_id", 12345);

@@ -9,6 +9,7 @@
 #include <functional>
 #include <future>
 #include <stdexcept>
+#include <type_traits>
 
 namespace kpipeline
 {
@@ -20,7 +21,7 @@ namespace kpipeline
 
     template <class F, class... Args>
     auto Enqueue(F&& f, Args&&... args)
-      -> std::future<typename std::result_of<F(Args...)>::type>;
+      -> std::future<std::invoke_result_t<F, Args...>>;
 
     size_t GetThreadCount() const { return workers_.size(); }
 
@@ -72,9 +73,9 @@ namespace kpipeline
 
   template <class F, class... Args>
   auto ThreadPool::Enqueue(F&& f, Args&&... args)
-    -> std::future<typename std::result_of<F(Args...)>::type>
+    -> std::future<std::invoke_result_t<F, Args...>>
   {
-    using return_type = typename std::result_of<F(Args...)>::type;
+    using return_type = std::invoke_result_t<F, Args...>;
 
     auto task = std::make_shared<std::packaged_task<return_type()>>(
       std::bind(std::forward<F>(f), std::forward<Args>(args)...)

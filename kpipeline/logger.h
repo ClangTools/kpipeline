@@ -104,7 +104,7 @@ namespace kpipeline
     // std::localtime 或 std::gmtime 不是线程安全的，在多线程环境下应避免直接使用，
     // 或使用它们的线程安全版本 (如 POSIX 的 localtime_r, Windows 的 localtime_s)。
     // 这里使用条件编译来尝试优先使用线程安全版本。
-    struct tm ptm;
+    struct tm ptm{}; // 值初始化，避免 localtime_r 失败时读写未初始化内存
 #if defined(_MSC_VER)
     // Microsoft Visual C++ 编译器
     localtime_s(&ptm, &tt);
@@ -112,9 +112,7 @@ namespace kpipeline
     // POSIX 兼容系统 (如 Linux, macOS)
     if (localtime_r(&tt, &ptm) == nullptr)
     {
-      // Fallback or error handling if localtime_r fails (unlikely)
-      // For simplicity, we might fall back to non-thread-safe localtime:
-      // ptm = *std::localtime(&tt);
+      // localtime_r 失败时 ptm 已被值初始化为零，strftime 将输出 epoch 时间
     }
 #endif
     char time_buffer[64]; // 足够存储 "%Y-%m-%d %H:%M:%S"

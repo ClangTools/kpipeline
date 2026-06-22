@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <chrono>
 #include <vector>
 #include <mutex>
@@ -25,14 +26,9 @@ namespace kpipeline
   public:
     Profiler() = default;
 
-    // 开始对一个节点计时
-    void Start(const std::string& node_name)
-    {
-      // 在 C++17 中，我们可以使用 if-constexpr 来避免在非 Windows 平台上链接不必要的库
-      // 这里我们简单地使用 std::chrono
-    }
-
     // 结束一个节点的计时，并记录结果
+    // 注意：计时起点由调用方直接使用 std::chrono::high_resolution_clock::now() 获取，
+    //       无需单独的 Start() 方法，因此已移除原先的空实现。
     void End(const std::string& node_name,
              std::chrono::time_point<std::chrono::high_resolution_clock> start_time)
     {

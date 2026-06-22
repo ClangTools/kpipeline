@@ -123,7 +123,7 @@ namespace nodes
   };
 
   REGISTER_NODE(FinalReportNode);
-} // namespace my_nodes
+} // namespace nodes
 
 int main(int argc, char* argv[])
 {
