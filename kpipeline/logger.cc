@@ -18,16 +18,12 @@ Logger::Logger() : level_(LogLevel::WARN), stop_flag_(false)
 
 Logger::~Logger()
 {
-  stop_flag_.store(true); // 使用 .store() 设置 atomic 变量
+  stop_flag_.store(true);
   cv_.notify_one();
   if (writer_thread_.joinable())
   {
     writer_thread_.join();
   }
-  // 析构时，确保队列中剩余的消息都被处理
-  // 这里没有显式处理剩余消息，它们会在 ProcessQueue 循环的最后一次迭代中被处理
-  // 如果希望在 join 之后立即 flush 剩余，可以在 join 之前加一个 ProcessQueue 的调用
-  // 但当前逻辑在 stop_flag_ 为 true 且队列非空时会继续处理，直到队列为空
 }
 
 void Logger::SetLevel(LogLevel level)
@@ -45,10 +41,12 @@ void Logger::ProcessQueue()
   while (true)
   {
     std::unique_lock<std::mutex> lock(mutex_);
-    // Lambda 表达式在 C++11 中可用
-    cv_.wait(lock, [this] { return !queue_.empty() || stop_flag_.load(); }); // 使用 .load() 读取 atomic 变量
+    // 使用带超时的 wait，避免析构时 notify 丢失导致线程永久阻塞。
+    // 即使 notify_one 在线程写 I/O 期间被错过，线程也会在超时后醒来检查 stop_flag_。
+    cv_.wait_for(lock, std::chrono::milliseconds(100),
+                 [this] { return !queue_.empty() || stop_flag_.load(); });
 
-    if (stop_flag_.load() && queue_.empty()) // 使用 .load() 读取 atomic 变量
+    if (stop_flag_.load() && queue_.empty())
     {
       break;
     }

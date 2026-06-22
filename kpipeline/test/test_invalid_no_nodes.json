@@ -1,0 +1,4 @@
+{
+  "name": "invalid_graph_missing_nodes_field",
+  "description": "This config is missing the 'nodes' array"
+}

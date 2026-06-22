@@ -56,17 +56,16 @@ namespace kpipeline
     // 这个构造函数允许你用一个 shared_ptr 所指向的 Node 的内容来初始化一个新的 Node 对象。
     // 如果 shared_ptr 为空，则 Node 会被默认构造（空名称，空向量）。
     explicit Node(const std::shared_ptr<Node>& source_ptr)
-      : name_(), inputs_(), outputs_(), control_inputs_() // 先默认构造所有成员
+      : name_(), inputs_(), outputs_(), control_inputs_(), exclusive_(false)
     {
       if (source_ptr)
       {
-        // 如果 shared_ptr 非空，则拷贝其指向的 Node 的内容
         name_ = source_ptr->name_;
         inputs_ = source_ptr->inputs_;
         outputs_ = source_ptr->outputs_;
         control_inputs_ = source_ptr->control_inputs_;
+        exclusive_ = source_ptr->exclusive_;
       }
-      // 如果 source_ptr 为空，则成员保持默认构造状态 (空字符串和空向量)
     }
 
   protected:

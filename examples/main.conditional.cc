@@ -115,12 +115,12 @@ namespace conditional_nodes
   REGISTER_NODE(CollectResultNode);
 } // namespace conditional_nodes
 
-void run_test_case(int initial_value)
+void run_test_case(int initial_value, const std::string& config_path)
 {
   std::cout << "\n--- Running Conditional Test with Input: " << initial_value << " ---\n";
   try
   {
-    auto graph = kpipeline::GraphBuilder::FromFile("examples/conditional_pipeline.json");
+    auto graph = kpipeline::GraphBuilder::FromFile(config_path);
 
     kpipeline::Workspace ws;
     ws.Set("initial_value", initial_value);
@@ -138,12 +138,20 @@ void run_test_case(int initial_value)
 
 int main(int argc, char* argv[])
 {
-  if (argc > 1)
+  if (argc < 2)
+  {
+    std::cerr << "Usage: " << argv[0] << " <path_to_conditional_pipeline.json> [initial_value]" << std::endl;
+    return 1;
+  }
+
+  std::string config_path = argv[1];
+
+  if (argc > 2)
   {
     try
     {
-      int value = std::stoi(argv[1]);
-      run_test_case(value);
+      int value = std::stoi(argv[2]);
+      run_test_case(value, config_path);
     }
     catch (const std::invalid_argument& e)
     {
@@ -153,8 +161,8 @@ int main(int argc, char* argv[])
   }
   else
   {
-    run_test_case(10);
-    run_test_case(-5);
+    run_test_case(10, config_path);
+    run_test_case(-5, config_path);
   }
 
   return 0;

@@ -27,3 +27,44 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "node_factory_test",
+    srcs = ["node_factory_test.cc"],
+    deps = [
+        "//kpipeline:node_factory",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "profiler_test",
+    srcs = ["profiler_test.cc"],
+    deps = [
+        "//kpipeline:profiler",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "thread_pool_test",
+    srcs = ["thread_pool_test.cc"],
+    deps = [
+        "//kpipeline:thread_pool",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "graph_builder_test",
+    srcs = ["graph_builder_test.cc"],
+    data = [
+        "test_invalid_no_nodes.json",
+        "test_valid_graph.json",
+    ],
+    deps = [
+        "//kpipeline:graph_builder",
+        "//kpipeline:node_factory",
+        "@googletest//:gtest_main",
+    ],
+)

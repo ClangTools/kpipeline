@@ -59,6 +59,14 @@ namespace kpipeline
       return data_.count(name) > 0;
     }
 
+    // 直接将 std::any 存入工作空间，避免对已有 any 的二次包装
+    // 用于跨 Workspace 传递数据（如 SubGraph 场景）
+    void SetAny(const std::string& name, std::any data)
+    {
+      std::unique_lock<std::shared_mutex> lock(mutex_);
+      data_[name] = std::move(data);
+    }
+
     std::any GetAny(const std::string& name) const
     {
       std::shared_lock<std::shared_mutex> lock(mutex_);
