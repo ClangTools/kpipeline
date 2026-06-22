@@ -68,3 +68,12 @@ cc_test(
         "@googletest//:gtest_main",
     ],
 )
+
+cc_test(
+    name = "logger_test",
+    srcs = ["logger_test.cc"],
+    deps = [
+        "//kpipeline:logger",
+        "@googletest//:gtest_main",
+    ],
+)
