@@ -59,7 +59,10 @@ cc_test(
     name = "graph_builder_test",
     srcs = ["graph_builder_test.cc"],
     data = [
+        "test_empty.json",
+        "test_invalid_json.json",
         "test_invalid_no_nodes.json",
+        "test_nodes_not_array.json",
         "test_valid_graph.json",
     ],
     deps = [

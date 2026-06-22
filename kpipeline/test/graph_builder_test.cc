@@ -2,7 +2,6 @@
 #include "kpipeline/node_factory.h"
 #include "kpipeline/workspace.h"
 #include "gtest/gtest.h"
-#include <fstream>
 #include <json/json.h>
 
 namespace
@@ -36,10 +35,9 @@ namespace
   REGISTER_NODE(TestBuilderNode);
 
   // 获取测试数据文件路径的辅助函数
-  // Bazel 测试运行时，data 文件位于 runfiles 中
+  // Bazel 测试运行时，data 文件位于 runfiles 中，路径相对于工作区根目录
   std::string GetTestFilePath(const std::string& filename)
   {
-    // 在 Bazel 测试中，data 文件被放在运行目录中
     return "kpipeline/test/" + filename;
   }
 } // namespace
@@ -47,8 +45,9 @@ namespace
 // 测试文件不存在时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnMissingFile)
 {
+  // 使用相对路径，在任何平台上都不存在
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile("/nonexistent/path/to/config.json"),
+    kpipeline::GraphBuilder::FromFile("this_file_does_not_exist_12345.json"),
     kpipeline::PipelineException
   );
 }
@@ -56,20 +55,10 @@ TEST(GraphBuilderTest, FromFileThrowsOnMissingFile)
 // 测试非法 JSON 时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnInvalidJson)
 {
-  // 创建一个临时文件包含非法 JSON
-  std::string temp_path = "/tmp/kpipeline_test_invalid.json";
-  {
-    std::ofstream ofs(temp_path);
-    ofs << "{ this is not valid json }}}";
-  }
-
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(temp_path),
+    kpipeline::GraphBuilder::FromFile(GetTestFilePath("test_invalid_json.json")),
     kpipeline::PipelineException
   );
-
-  // 清理
-  std::remove(temp_path.c_str());
 }
 
 // 测试缺少 nodes 字段时抛出异常
@@ -99,33 +88,17 @@ TEST(GraphBuilderTest, FromFileBuildsValidGraph)
 // 测试空 JSON 配置文件
 TEST(GraphBuilderTest, FromFileThrowsOnEmptyJson)
 {
-  std::string temp_path = "/tmp/kpipeline_test_empty.json";
-  {
-    std::ofstream ofs(temp_path);
-    ofs << "{}";
-  }
-
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(temp_path),
+    kpipeline::GraphBuilder::FromFile(GetTestFilePath("test_empty.json")),
     kpipeline::PipelineException
   );
-
-  std::remove(temp_path.c_str());
 }
 
 // 测试 nodes 字段不是数组时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnNodesNotArray)
 {
-  std::string temp_path = "/tmp/kpipeline_test_nodes_not_array.json";
-  {
-    std::ofstream ofs(temp_path);
-    ofs << R"({"name": "bad", "nodes": "not_an_array"})";
-  }
-
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(temp_path),
+    kpipeline::GraphBuilder::FromFile(GetTestFilePath("test_nodes_not_array.json")),
     kpipeline::PipelineException
   );
-
-  std::remove(temp_path.c_str());
 }
