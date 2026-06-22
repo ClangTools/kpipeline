@@ -176,7 +176,7 @@ TEST_F(LoggerTest, ConcurrentLoggingIsThreadSafe)
   std::vector<std::thread> threads;
   for (int t = 0; t < kThreads; ++t)
   {
-    threads.emplace_back([t, &total_written]()
+    threads.emplace_back([t, &total_written, kMessagesPerThread]()
     {
       for (int i = 0; i < kMessagesPerThread; ++i)
       {
