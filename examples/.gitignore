@@ -34,7 +34,7 @@
 *.app
 
 # custom build
-build/
+BUILD.bazel/
 main/build/
 
 # idea
