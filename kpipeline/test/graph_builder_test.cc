@@ -3,6 +3,7 @@
 #include "kpipeline/workspace.h"
 #include "gtest/gtest.h"
 #include <json/json.h>
+#include <cstdlib>
 
 namespace
 {
@@ -16,7 +17,6 @@ namespace
 
     void Execute(kpipeline::Workspace& ws) const override
     {
-      // 如果有输入，复制到输出；如果没有输入，设置默认值
       for (const auto& output : outputs_)
       {
         if (!inputs_.empty() && ws.Has(inputs_.at(0)))
@@ -31,13 +31,21 @@ namespace
     }
   };
 
-  // 注册测试节点
   REGISTER_NODE(TestBuilderNode);
 
-  // 获取测试数据文件路径的辅助函数
-  // Bazel 测试运行时，data 文件位于 runfiles 中，路径相对于工作区根目录
+  // 跨平台的测试数据文件路径解析
+  // Bazel 在测试时设置 TEST_SRCDIR 和 TEST_WORKSPACE 环境变量
+  // Linux/macOS: TEST_SRCDIR 指向 runfiles 目录
+  // Windows:     同样通过环境变量定位 runfiles
   std::string GetTestFilePath(const std::string& filename)
   {
+    const char* srcdir = std::getenv("TEST_SRCDIR");
+    const char* workspace = std::getenv("TEST_WORKSPACE");
+    if (srcdir && workspace)
+    {
+      return std::string(srcdir) + "/" + workspace + "/kpipeline/test/" + filename;
+    }
+    // Fallback: 使用相对路径（适用于从工作区根目录直接运行的场景）
     return "kpipeline/test/" + filename;
   }
 } // namespace
@@ -45,7 +53,6 @@ namespace
 // 测试文件不存在时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnMissingFile)
 {
-  // 使用相对路径，在任何平台上都不存在
   EXPECT_THROW(
     kpipeline::GraphBuilder::FromFile("this_file_does_not_exist_12345.json"),
     kpipeline::PipelineException
@@ -55,8 +62,9 @@ TEST(GraphBuilderTest, FromFileThrowsOnMissingFile)
 // 测试非法 JSON 时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnInvalidJson)
 {
+  std::string path = GetTestFilePath("test_invalid_json.json");
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(GetTestFilePath("test_invalid_json.json")),
+    kpipeline::GraphBuilder::FromFile(path),
     kpipeline::PipelineException
   );
 }
@@ -64,8 +72,9 @@ TEST(GraphBuilderTest, FromFileThrowsOnInvalidJson)
 // 测试缺少 nodes 字段时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnMissingNodesField)
 {
+  std::string path = GetTestFilePath("test_invalid_no_nodes.json");
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(GetTestFilePath("test_invalid_no_nodes.json")),
+    kpipeline::GraphBuilder::FromFile(path),
     kpipeline::PipelineException
   );
 }
@@ -73,14 +82,13 @@ TEST(GraphBuilderTest, FromFileThrowsOnMissingNodesField)
 // 测试合法 JSON 构建可执行的 Graph
 TEST(GraphBuilderTest, FromFileBuildsValidGraph)
 {
-  auto graph = kpipeline::GraphBuilder::FromFile(GetTestFilePath("test_valid_graph.json"));
+  std::string path = GetTestFilePath("test_valid_graph.json");
+  auto graph = kpipeline::GraphBuilder::FromFile(path);
   ASSERT_NE(graph, nullptr);
 
-  // 运行图验证它确实可以执行
   kpipeline::Workspace ws;
   graph->Run(ws, 1);
 
-  // 验证 sink 节点的输出存在
   EXPECT_TRUE(ws.Has("result"));
   EXPECT_EQ(ws.Get<std::string>("result"), "default_value");
 }
@@ -88,8 +96,9 @@ TEST(GraphBuilderTest, FromFileBuildsValidGraph)
 // 测试空 JSON 配置文件
 TEST(GraphBuilderTest, FromFileThrowsOnEmptyJson)
 {
+  std::string path = GetTestFilePath("test_empty.json");
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(GetTestFilePath("test_empty.json")),
+    kpipeline::GraphBuilder::FromFile(path),
     kpipeline::PipelineException
   );
 }
@@ -97,8 +106,19 @@ TEST(GraphBuilderTest, FromFileThrowsOnEmptyJson)
 // 测试 nodes 字段不是数组时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnNodesNotArray)
 {
+  std::string path = GetTestFilePath("test_nodes_not_array.json");
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(GetTestFilePath("test_nodes_not_array.json")),
+    kpipeline::GraphBuilder::FromFile(path),
     kpipeline::PipelineException
   );
+}
+
+// 验证 GetTestFilePath 解析出的路径指向真实存在的文件
+TEST(GraphBuilderTest, TestFilePathResolvesToExistingFile)
+{
+  std::string path = GetTestFilePath("test_valid_graph.json");
+  std::ifstream f(path);
+  ASSERT_TRUE(f.good()) << "Cannot open test data file at resolved path: " << path
+                         << "\nTEST_SRCDIR=" << (std::getenv("TEST_SRCDIR") ? std::getenv("TEST_SRCDIR") : "(null)")
+                         << "\nTEST_WORKSPACE=" << (std::getenv("TEST_WORKSPACE") ? std::getenv("TEST_WORKSPACE") : "(null)");
 }

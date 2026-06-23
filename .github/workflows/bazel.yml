@@ -45,16 +45,7 @@ jobs:
       - name: Bazel Test
         run: |
           bazel test kpipeline/... --test_output=errors --test_verbose_timeout_warnings
-        continue-on-error: true
 
-      - name: Show Test Logs on Failure
-        if: failure()
-        shell: bash
-        run: |
-          echo "=== Test Failures ==="
-          # 查找所有失败的测试日志
-          find bazel-testlogs -name "test.log" -exec sh -c 'echo "--- {} ---"; cat "{}"; echo ""' \;
-          exit 1
   example:
     needs: build
     strategy:
