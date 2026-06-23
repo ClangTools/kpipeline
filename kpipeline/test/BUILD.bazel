@@ -58,10 +58,6 @@ cc_test(
 cc_test(
     name = "graph_builder_test",
     srcs = ["graph_builder_test.cc"],
-    data = [
-        "test_invalid_no_nodes.json",
-        "test_valid_graph.json",
-    ],
     deps = [
         "//kpipeline:graph_builder",
         "//kpipeline:node_factory",

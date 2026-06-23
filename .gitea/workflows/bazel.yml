@@ -48,7 +48,7 @@ jobs:
 
       - name: Bazel Test
         run: |
-          bazel test kpipeline/...
+          bazel test kpipeline/... --test_output=errors --test_verbose_timeout_warnings
   example:
     needs: build
     strategy:

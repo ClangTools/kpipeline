@@ -167,8 +167,8 @@ TEST_F(LoggerTest, AllLevelLabelsCorrect)
 // 测试多线程并发写日志不崩溃，且所有消息最终输出
 TEST_F(LoggerTest, ConcurrentLoggingIsThreadSafe)
 {
-  const int kThreads = 10;
-  const int kMessagesPerThread = 5;
+  constexpr int kThreads = 10;
+  constexpr int kMessagesPerThread = 5;
   std::atomic<int> total_written{0};
 
   testing::internal::CaptureStdout();
@@ -176,7 +176,7 @@ TEST_F(LoggerTest, ConcurrentLoggingIsThreadSafe)
   std::vector<std::thread> threads;
   for (int t = 0; t < kThreads; ++t)
   {
-    threads.emplace_back([t, &total_written]()
+    threads.emplace_back([t, &total_written, kMessagesPerThread]()
     {
       for (int i = 0; i < kMessagesPerThread; ++i)
       {
