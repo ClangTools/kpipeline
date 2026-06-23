@@ -3,7 +3,9 @@
 #include "kpipeline/workspace.h"
 #include "gtest/gtest.h"
 #include <json/json.h>
+#include <fstream>
 #include <cstdlib>
+#include <cstdio>
 
 namespace
 {
@@ -33,21 +35,42 @@ namespace
 
   REGISTER_NODE(TestBuilderNode);
 
-  // 跨平台的测试数据文件路径解析
-  // Bazel 在测试时设置 TEST_SRCDIR 和 TEST_WORKSPACE 环境变量
-  // Linux/macOS: TEST_SRCDIR 指向 runfiles 目录
-  // Windows:     同样通过环境变量定位 runfiles
-  std::string GetTestFilePath(const std::string& filename)
+  // 跨平台临时文件辅助类：构造时创建，析构时自动删除
+  // 不依赖 <filesystem>，兼容 macOS 10.15 以下和 Windows
+  class TempJsonFile
   {
-    const char* srcdir = std::getenv("TEST_SRCDIR");
-    const char* workspace = std::getenv("TEST_WORKSPACE");
-    if (srcdir && workspace)
+  public:
+    TempJsonFile(const std::string& content)
     {
-      return std::string(srcdir) + "/" + workspace + "/kpipeline/test/" + filename;
+      // 使用 std::tmpnam 生成唯一文件名
+      char name_buf[L_tmpnam];
+      if (std::tmpnam(name_buf) != nullptr)
+      {
+        path_ = std::string(name_buf) + ".json";
+      }
+      else
+      {
+        // fallback: 使用计数器
+        path_ = "kpipeline_test_" + std::to_string(counter_++) + ".json";
+      }
+      std::ofstream ofs(path_);
+      ofs << content;
     }
-    // Fallback: 使用相对路径（适用于从工作区根目录直接运行的场景）
-    return "kpipeline/test/" + filename;
-  }
+
+    ~TempJsonFile()
+    {
+      std::remove(path_.c_str());
+    }
+
+    const std::string& GetPath() const { return path_; }
+
+  private:
+    std::string path_;
+    static int counter_;
+  };
+
+  int TempJsonFile::counter_ = 0;
+
 } // namespace
 
 // 测试文件不存在时抛出异常
@@ -62,9 +85,9 @@ TEST(GraphBuilderTest, FromFileThrowsOnMissingFile)
 // 测试非法 JSON 时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnInvalidJson)
 {
-  std::string path = GetTestFilePath("test_invalid_json.json");
+  TempJsonFile tmp("{ this is not valid json }}}");
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(path),
+    kpipeline::GraphBuilder::FromFile(tmp.GetPath()),
     kpipeline::PipelineException
   );
 }
@@ -72,9 +95,9 @@ TEST(GraphBuilderTest, FromFileThrowsOnInvalidJson)
 // 测试缺少 nodes 字段时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnMissingNodesField)
 {
-  std::string path = GetTestFilePath("test_invalid_no_nodes.json");
+  TempJsonFile tmp(R"({"name": "test", "description": "missing nodes"})");
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(path),
+    kpipeline::GraphBuilder::FromFile(tmp.GetPath()),
     kpipeline::PipelineException
   );
 }
@@ -82,8 +105,24 @@ TEST(GraphBuilderTest, FromFileThrowsOnMissingNodesField)
 // 测试合法 JSON 构建可执行的 Graph
 TEST(GraphBuilderTest, FromFileBuildsValidGraph)
 {
-  std::string path = GetTestFilePath("test_valid_graph.json");
-  auto graph = kpipeline::GraphBuilder::FromFile(path);
+  TempJsonFile tmp(R"({
+    "name": "test_graph",
+    "nodes": [
+      {
+        "type": "TestBuilderNode",
+        "name": "source",
+        "outputs": ["data"]
+      },
+      {
+        "type": "TestBuilderNode",
+        "name": "sink",
+        "inputs": ["data"],
+        "outputs": ["result"]
+      }
+    ]
+  })");
+
+  auto graph = kpipeline::GraphBuilder::FromFile(tmp.GetPath());
   ASSERT_NE(graph, nullptr);
 
   kpipeline::Workspace ws;
@@ -96,9 +135,9 @@ TEST(GraphBuilderTest, FromFileBuildsValidGraph)
 // 测试空 JSON 配置文件
 TEST(GraphBuilderTest, FromFileThrowsOnEmptyJson)
 {
-  std::string path = GetTestFilePath("test_empty.json");
+  TempJsonFile tmp("{}");
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(path),
+    kpipeline::GraphBuilder::FromFile(tmp.GetPath()),
     kpipeline::PipelineException
   );
 }
@@ -106,19 +145,9 @@ TEST(GraphBuilderTest, FromFileThrowsOnEmptyJson)
 // 测试 nodes 字段不是数组时抛出异常
 TEST(GraphBuilderTest, FromFileThrowsOnNodesNotArray)
 {
-  std::string path = GetTestFilePath("test_nodes_not_array.json");
+  TempJsonFile tmp(R"({"name": "bad", "nodes": "not_an_array"})");
   EXPECT_THROW(
-    kpipeline::GraphBuilder::FromFile(path),
+    kpipeline::GraphBuilder::FromFile(tmp.GetPath()),
     kpipeline::PipelineException
   );
-}
-
-// 验证 GetTestFilePath 解析出的路径指向真实存在的文件
-TEST(GraphBuilderTest, TestFilePathResolvesToExistingFile)
-{
-  std::string path = GetTestFilePath("test_valid_graph.json");
-  std::ifstream f(path);
-  ASSERT_TRUE(f.good()) << "Cannot open test data file at resolved path: " << path
-                         << "\nTEST_SRCDIR=" << (std::getenv("TEST_SRCDIR") ? std::getenv("TEST_SRCDIR") : "(null)")
-                         << "\nTEST_WORKSPACE=" << (std::getenv("TEST_WORKSPACE") ? std::getenv("TEST_WORKSPACE") : "(null)");
 }
